@@ -1,0 +1,34 @@
+{
+  "project": "Plataforma de Acompanhamento Psicológico",
+  "version": "1.0",
+  "date": "2026-08-24",
+  "status": "pre-mvp",
+  "stack": [
+    "Next.js",
+    "React",
+    "TypeScript",
+    "Tailwind CSS",
+    "Supabase",
+    "PostgreSQL"
+  ],
+  "docs": [
+    "00_README.md",
+    "01_VISAO_PRODUTO.md",
+    "02_PRD_REQUISITOS.md",
+    "03_PERSONAS_JORNADAS_FLUXOS.md",
+    "04_REGRAS_NEGOCIO_PERMISSOES.md",
+    "05_ARQUITETURA_TECNICA.md",
+    "06_BANCO_DE_DADOS.md",
+    "07_API_CONTRATOS.md",
+    "08_SEGURANCA_LGPD_COMPLIANCE.md",
+    "09_UX_UI_DESIGN_SYSTEM.md",
+    "10_IA_AUTOMACOES.md",
+    "11_BACKLOG_ROADMAP.md",
+    "12_QA_CRITERIOS_ACEITE.md",
+    "13_DEVOPS_OBSERVABILIDADE.md",
+    "14_METRICAS_ANALYTICS.md",
+    "15_RISCOS_DECISOES_ABERTAS.md",
+    "16_GLOSSARIO.md",
+    "DOCUMENTACAO_COMPLETA.md"
+  ]
+}
