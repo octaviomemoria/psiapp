@@ -22,7 +22,9 @@ import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Modal } from '@/components/ui/Modal';
+import { PatientInviteModal } from './PatientInviteModal';
 import { formatDate, formatRelativeDate } from '@/lib/utils';
+import { Share2, Link } from 'lucide-react';
 
 interface PatientListViewProps {
   onSelectPatient: (patientId: string) => void;
@@ -34,6 +36,7 @@ export const PatientListView: React.FC<PatientListViewProps> = ({ onSelectPatien
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'pending_exercises'>('all');
   const [isNewPatientModalOpen, setIsNewPatientModalOpen] = useState(false);
+  const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
 
   // Form State Novo Paciente
   const [fullName, setFullName] = useState('');
@@ -116,15 +119,27 @@ export const PatientListView: React.FC<PatientListViewProps> = ({ onSelectPatien
           </p>
         </div>
 
-        <Button
-          variant="primary"
-          size="md"
-          onClick={() => setIsNewPatientModalOpen(true)}
-          className="shadow-sm font-semibold"
-        >
-          <UserPlus className="w-4 h-4 mr-2" />
-          Cadastrar Novo Paciente
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="md"
+            onClick={() => setIsInviteModalOpen(true)}
+            className="border-teal-600 text-teal-700 hover:bg-teal-50 font-semibold"
+          >
+            <Share2 className="w-4 h-4 mr-2" />
+            Convidar Paciente (Link / WhatsApp)
+          </Button>
+
+          <Button
+            variant="primary"
+            size="md"
+            onClick={() => setIsNewPatientModalOpen(true)}
+            className="shadow-sm font-semibold"
+          >
+            <UserPlus className="w-4 h-4 mr-2" />
+            Cadastrar Manualmente
+          </Button>
+        </div>
       </div>
 
       {/* Barra de Busca e Filtros */}
@@ -409,6 +424,11 @@ export const PatientListView: React.FC<PatientListViewProps> = ({ onSelectPatien
           </div>
         </form>
       </Modal>
+
+      <PatientInviteModal
+        isOpen={isInviteModalOpen}
+        onClose={() => setIsInviteModalOpen(false)}
+      />
     </div>
   );
 };

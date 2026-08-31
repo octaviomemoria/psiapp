@@ -30,6 +30,7 @@ import {
   Activity,
   CheckCircle2,
   AlertCircle,
+  AlertTriangle,
   ExternalLink,
   MessageSquare,
   Sparkles,
@@ -46,6 +47,9 @@ import { formatDate, formatDateTime, formatRelativeDate } from '@/lib/utils';
 import { SessionFormModal } from './SessionFormModal';
 import { ExerciseBuilderModal } from './ExerciseBuilderModal';
 import { ClinicalReportModal } from './ClinicalReportModal';
+import { LiveSessionModal } from './LiveSessionModal';
+import { PsychometricScalesModal } from '@/components/common/PsychometricScalesModal';
+import { Play, Brain } from 'lucide-react';
 import {
   ResponsiveContainer,
   LineChart,
@@ -63,7 +67,7 @@ interface PatientDetailViewProps {
   onBack: () => void;
 }
 
-type TabType = 'overview' | 'sessions' | 'goals' | 'exercises' | 'diary' | 'mood' | 'contents';
+type TabType = 'overview' | 'sessions' | 'goals' | 'exercises' | 'scales' | 'diary' | 'mood' | 'contents';
 
 export const PatientDetailView: React.FC<PatientDetailViewProps> = ({ patientId, onBack }) => {
   const {
@@ -80,6 +84,7 @@ export const PatientDetailView: React.FC<PatientDetailViewProps> = ({ patientId,
     addExerciseFeedback,
     assignContentToPatient,
     getVisibleDiaryEntriesForPsychologist,
+    getPatientPsychometricResults,
     moodLogs,
     switchRole,
   } = usePsi();
@@ -88,6 +93,8 @@ export const PatientDetailView: React.FC<PatientDetailViewProps> = ({ patientId,
   const [isSessionModalOpen, setIsSessionModalOpen] = useState(false);
   const [sessionToEdit, setSessionToEdit] = useState<TherapySession | null>(null);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+  const [isLiveSessionModalOpen, setIsLiveSessionModalOpen] = useState(false);
+  const [isScalesModalOpen, setIsScalesModalOpen] = useState(false);
 
   // Modais de Atribuição e Criação
   const [isGoalModalOpen, setIsGoalModalOpen] = useState(false);
@@ -187,11 +194,14 @@ export const PatientDetailView: React.FC<PatientDetailViewProps> = ({ patientId,
     setClinicalObservations('');
   };
 
+  const patientPsychometrics = getPatientPsychometricResults(patient.id);
+
   const tabs: { id: TabType; label: string; icon: React.FC<{ className?: string }>; count?: number }[] = [
     { id: 'overview', label: 'Visão Geral', icon: Activity },
     { id: 'sessions', label: 'Sessões & Timeline', icon: Calendar, count: patientSessions.length },
     { id: 'goals', label: 'Objetivos Terapêuticos', icon: Target, count: patientGoals.length },
     { id: 'exercises', label: 'Exercícios', icon: ClipboardList, count: patientExercises.length },
+    { id: 'scales', label: 'Escalas & Testes', icon: Brain, count: patientPsychometrics.length },
     { id: 'diary', label: 'Diário Compartilhado', icon: BookOpen, count: sharedDiaryEntries.length },
     { id: 'mood', label: 'Humor & Evolução', icon: Heart, count: patientMoods.length },
     { id: 'contents', label: 'Conteúdos', icon: FileText, count: patientAssignedContents.length },
@@ -243,6 +253,16 @@ export const PatientDetailView: React.FC<PatientDetailViewProps> = ({ patientId,
             <Button
               variant="primary"
               size="sm"
+              onClick={() => setIsLiveSessionModalOpen(true)}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold flex items-center gap-1.5 shadow-md shadow-emerald-600/20"
+            >
+              <Play className="w-4 h-4 fill-white" />
+              Iniciar Sessão ao Vivo
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => {
                 setSessionToEdit(null);
                 setIsSessionModalOpen(true);
@@ -250,7 +270,18 @@ export const PatientDetailView: React.FC<PatientDetailViewProps> = ({ patientId,
               className="font-semibold"
             >
               <Plus className="w-4 h-4 mr-1.5" />
-              Nova Sessão
+              Registrar Sessão
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsScalesModalOpen(true)}
+              className="text-xs text-slate-700 border-slate-300 hover:bg-slate-50 flex items-center gap-1"
+              title="Aplicar PHQ-9 ou GAD-7"
+            >
+              <Brain className="w-3.5 h-3.5 text-emerald-600" />
+              Aplicar Escala
             </Button>
 
             <Button
@@ -833,7 +864,89 @@ export const PatientDetailView: React.FC<PatientDetailViewProps> = ({ patientId,
         </div>
       )}
 
-      {/* 5. ABA: DIÁRIO COMPARTILHADO */}
+      {/* 5. ABA: ESCALAS & TESTES PSICOMÉTRICOS */}
+      {activeTab === 'scales' && (
+        <div className="space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-r from-emerald-800 to-slate-900 p-6 rounded-3xl text-white shadow-soft">
+            <div className="space-y-1">
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-semibold">
+                <Brain className="w-3.5 h-3.5" />
+                <span>Protocolos de Rastreio Padronizados</span>
+              </div>
+              <h3 className="text-xl font-bold">Escalas Psicométricas — {patient.full_name}</h3>
+              <p className="text-xs text-emerald-100 max-w-lg">
+                Monitore o escore de gravidade de Depressão (PHQ-9) e Ansiedade (GAD-7) com interpretação clínica imediata.
+              </p>
+            </div>
+
+            <Button
+              onClick={() => setIsScalesModalOpen(true)}
+              className="bg-emerald-500 hover:bg-emerald-600 text-white font-semibold flex items-center gap-1.5 shadow-md shadow-emerald-500/20 shrink-0"
+            >
+              <Plus className="w-4 h-4" />
+              Aplicar Novo Teste
+            </Button>
+          </div>
+
+          {patientPsychometrics.length === 0 ? (
+            <EmptyState
+              icon={Brain}
+              title="Nenhum teste psicométrico registrado"
+              description="Aplique uma escala padronizada (PHQ-9 ou GAD-7) para registrar a linha de base e acompanhar a evolução dos sintomas."
+              actionLabel="Aplicar Primeiro Teste"
+              onAction={() => setIsScalesModalOpen(true)}
+            />
+          ) : (
+            <div className="grid md:grid-cols-2 gap-4">
+              {patientPsychometrics.map((res) => (
+                <Card key={res.id} className="p-5 space-y-4 border border-slate-100 dark:border-slate-800 hover:shadow-md transition-shadow">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <span className="text-[11px] text-slate-400 font-medium">{formatDateTime(res.taken_at)}</span>
+                      <h4 className="font-bold text-slate-900 dark:text-white text-base mt-0.5">{res.scale_name}</h4>
+                    </div>
+                    <Badge
+                      variant={
+                        res.severity_level === 'Mínima'
+                          ? 'success'
+                          : res.severity_level === 'Leve'
+                          ? 'info'
+                          : res.severity_level === 'Moderada'
+                          ? 'warning'
+                          : 'danger'
+                      }
+                      size="sm"
+                    >
+                      {res.severity_level}
+                    </Badge>
+                  </div>
+
+                  <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 flex items-center justify-between border border-slate-100 dark:border-slate-700">
+                    <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Pontuação Total</span>
+                    <span className="text-2xl font-black text-slate-900 dark:text-white">{res.total_score} pts</span>
+                  </div>
+
+                  {res.risk_flag && (
+                    <div className="bg-rose-500/10 border border-rose-500/30 text-rose-800 dark:text-rose-300 p-3 rounded-xl text-xs flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600" />
+                      <span><strong>Alerta Clínico:</strong> Pontuação no item de ideação/risco. Proceder com manejo ético protetivo.</span>
+                    </div>
+                  )}
+
+                  <div className="space-y-1">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Interpretação Diagnóstica</span>
+                    <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed bg-slate-50 dark:bg-slate-800/30 p-3 rounded-xl border border-slate-100 dark:border-slate-700">
+                      {res.clinical_interpretation}
+                    </p>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 6. ABA: DIÁRIO COMPARTILHADO */}
       {activeTab === 'diary' && (
         <div className="space-y-6">
           <div className="flex items-center justify-between">
@@ -1281,6 +1394,20 @@ export const PatientDetailView: React.FC<PatientDetailViewProps> = ({ patientId,
         patient={patient}
         isOpen={isReportModalOpen}
         onClose={() => setIsReportModalOpen(false)}
+      />
+
+      {/* Modal de Sessão ao Vivo */}
+      <LiveSessionModal
+        patient={patient}
+        isOpen={isLiveSessionModalOpen}
+        onClose={() => setIsLiveSessionModalOpen(false)}
+      />
+
+      {/* Modal de Escalas Psicométricas */}
+      <PsychometricScalesModal
+        patientId={patient.id}
+        isOpen={isScalesModalOpen}
+        onClose={() => setIsScalesModalOpen(false)}
       />
     </div>
   );

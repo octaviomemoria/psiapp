@@ -24,6 +24,9 @@ import { Badge } from '@/components/ui/Badge';
 import { formatDate, formatDateTime, formatRelativeDate } from '@/lib/utils';
 import { SessionFormModal } from './SessionFormModal';
 import { ExerciseBuilderModal } from './ExerciseBuilderModal';
+import { LiveSessionModal } from './LiveSessionModal';
+import { PatientInviteModal } from './PatientInviteModal';
+import { Play, UserPlus } from 'lucide-react';
 
 interface DashboardViewProps {
   onNavigateTab: (tab: string) => void;
@@ -43,6 +46,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab, onS
 
   const [isSessionModalOpen, setIsSessionModalOpen] = useState(false);
   const [isExerciseModalOpen, setIsExerciseModalOpen] = useState(false);
+  const [isLiveSessionModalOpen, setIsLiveSessionModalOpen] = useState(false);
+  const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
+  const [selectedPatientForLive, setSelectedPatientForLive] = useState<any>(patients[0]);
 
   // Cálculos de Métricas
   const activePatients = patients.filter(p => p.status === 'active');
@@ -93,24 +99,36 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab, onS
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2.5">
             <Button
               variant="primary"
               size="md"
-              onClick={() => setIsSessionModalOpen(true)}
-              className="bg-white text-teal-800 hover:bg-teal-50 shadow-md font-semibold"
+              onClick={() => {
+                setSelectedPatientForLive(patients[0]);
+                setIsLiveSessionModalOpen(true);
+              }}
+              className="bg-emerald-500 text-white hover:bg-emerald-600 shadow-md font-semibold flex items-center gap-1.5"
             >
-              <Plus className="w-4 h-4 mr-1" />
-              Registrar Sessão
+              <Play className="w-4 h-4 fill-white" />
+              Iniciar Sessão ao Vivo
             </Button>
             <Button
               variant="outline"
               size="md"
-              onClick={() => setIsExerciseModalOpen(true)}
+              onClick={() => setIsInviteModalOpen(true)}
+              className="border-teal-400/40 text-white hover:bg-white/10 flex items-center gap-1.5"
+            >
+              <UserPlus className="w-4 h-4" />
+              Convidar Paciente
+            </Button>
+            <Button
+              variant="outline"
+              size="md"
+              onClick={() => setIsSessionModalOpen(true)}
               className="border-teal-400/40 text-white hover:bg-white/10"
             >
-              <ClipboardList className="w-4 h-4 mr-1" />
-              Criar Exercício
+              <Plus className="w-4 h-4 mr-1" />
+              Registrar Sessão
             </Button>
           </div>
         </div>
@@ -416,6 +434,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab, onS
       <ExerciseBuilderModal
         isOpen={isExerciseModalOpen}
         onClose={() => setIsExerciseModalOpen(false)}
+      />
+
+      {selectedPatientForLive && (
+        <LiveSessionModal
+          isOpen={isLiveSessionModalOpen}
+          onClose={() => setIsLiveSessionModalOpen(false)}
+          patient={selectedPatientForLive}
+        />
+      )}
+
+      <PatientInviteModal
+        isOpen={isInviteModalOpen}
+        onClose={() => setIsInviteModalOpen(false)}
       />
     </div>
   );

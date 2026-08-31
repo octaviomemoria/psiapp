@@ -20,7 +20,9 @@ export type NotificationType =
   | 'appointment_reminder' 
   | 'mood_checkin' 
   | 'content_assigned' 
-  | 'diary_shared';
+  | 'diary_shared'
+  | 'scale_completed'
+  | 'invite_accepted';
 
 export interface InAppNotification {
   id: string;
@@ -76,9 +78,12 @@ export interface Psychologist {
   profile_id: string;
   crp_number: string;
   crp_state: string;
-  approach: string; // Ex: TCC, Psicanálise, Humanista
+  e_psi_verified?: boolean;
+  approach: string; // Ex: TCC, Psicanálise, Humanista, ACT, DBT
   specialties: string[];
   bio: string;
+  session_default_price?: number;
+  session_default_duration_minutes?: number;
   profile?: UserProfile;
 }
 
@@ -97,7 +102,21 @@ export interface Patient {
   started_at: string;
   ended_at?: string;
   clinical_notes_overview?: string;
+  anamnesis_completed?: boolean;
   profile?: UserProfile;
+}
+
+export interface PatientInvite {
+  id: string;
+  psychologist_id: string;
+  patient_id?: string;
+  token: string;
+  patient_name: string;
+  patient_email: string;
+  patient_phone: string;
+  status: 'pending' | 'accepted' | 'expired';
+  expires_at: string;
+  created_at: string;
 }
 
 export interface Appointment {
@@ -115,6 +134,7 @@ export interface Appointment {
   price?: number;
   payment_status?: PaymentStatus;
   receipt_number?: string;
+  paid_at?: string;
 }
 
 export interface TherapySession {
@@ -128,6 +148,10 @@ export interface TherapySession {
   modality: SessionModality;
   main_topics: string[];
   summary: string;
+  soap_subjective?: string;
+  soap_objective?: string;
+  soap_assessment?: string;
+  soap_plan?: string;
   interventions_used?: string;
   evolution_observed?: string;
   homework_assigned?: string;
@@ -148,6 +172,60 @@ export interface SessionPrivateNotes {
   risk_assessment_notes?: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface CognitiveDiagram {
+  id: string;
+  session_id?: string;
+  patient_id: string;
+  psychologist_id: string;
+  situation: string;
+  automatic_thought: string;
+  meaning_of_thought?: string;
+  emotions: string[];
+  emotion_intensity: number; // 0-100
+  physiological_reaction: string;
+  behavior: string;
+  alternative_thought?: string;
+  outcome_emotion_intensity?: number;
+  created_at: string;
+}
+
+export interface PsychometricScaleType {
+  id: 'phq9' | 'gad7' | 'dass21' | 'bdi2';
+  name: string;
+  acronym: string;
+  description: string;
+  questions_count: number;
+  estimated_time: string;
+  category: 'Depressão' | 'Ansiedade' | 'Múltiplo' | 'Humor';
+}
+
+export interface PsychometricResult {
+  id: string;
+  patient_id: string;
+  psychologist_id: string;
+  scale_id: 'phq9' | 'gad7' | 'dass21' | 'bdi2';
+  scale_name: string;
+  total_score: number;
+  severity_level: 'Mínima' | 'Leve' | 'Moderada' | 'Moderadamente Grave' | 'Grave' | 'Extremamente Severa';
+  risk_flag?: boolean; // Ex: Item 9 do PHQ-9 positivo
+  answers: Record<string, number>;
+  clinical_interpretation: string;
+  taken_at: string;
+}
+
+export interface VoiceAnchor {
+  id: string;
+  patient_id: string;
+  psychologist_id: string;
+  title: string;
+  category: string;
+  instruction?: string;
+  audio_url?: string;
+  duration_seconds: number;
+  transcript?: string;
+  created_at: string;
 }
 
 export interface Goal {

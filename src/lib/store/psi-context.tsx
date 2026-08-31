@@ -19,7 +19,11 @@ import {
   UserRole,
   AppointmentStatus,
   PaymentStatus,
-  GoalStatus
+  GoalStatus,
+  PsychometricResult,
+  CognitiveDiagram,
+  VoiceAnchor,
+  PatientInvite
 } from '@/types/database';
 import {
   INITIAL_PSYCHOLOGIST,
@@ -33,7 +37,11 @@ import {
   INITIAL_SESSIONS,
   INITIAL_CONTENT_ITEMS,
   INITIAL_PATIENT_CONTENTS,
-  INITIAL_NOTIFICATIONS
+  INITIAL_NOTIFICATIONS,
+  INITIAL_PSYCHOMETRIC_RESULTS,
+  INITIAL_COGNITIVE_DIAGRAMS,
+  INITIAL_VOICE_ANCHORS,
+  INITIAL_INVITES
 } from './initial-data';
 
 interface PsiContextType {
@@ -56,6 +64,10 @@ interface PsiContextType {
   contentItems: ContentItem[];
   patientContents: PatientContent[];
   notifications: InAppNotification[];
+  psychometricResults: PsychometricResult[];
+  cognitiveDiagrams: CognitiveDiagram[];
+  voiceAnchors: VoiceAnchor[];
+  patientInvites: PatientInvite[];
 
   // Notificações
   unreadNotificationsCount: number;
@@ -77,6 +89,13 @@ interface PsiContextType {
   assignExercise: (patientId: string, templateId: string, customInstructions?: string, dueDate?: string) => void;
   addExerciseFeedback: (assignmentId: string, feedbackText: string, clinicalObservations?: string) => void;
   assignContentToPatient: (patientId: string, contentId: string, personalizedNote?: string) => void;
+  
+  // Novas Ferramentas Clínicas & Gestão
+  addPsychometricResult: (result: Omit<PsychometricResult, 'id' | 'taken_at'>) => void;
+  addCognitiveDiagram: (diagram: Omit<CognitiveDiagram, 'id' | 'created_at'>) => void;
+  addVoiceAnchor: (anchor: Omit<VoiceAnchor, 'id' | 'created_at'>) => void;
+  createPatientInvite: (name: string, email: string, phone: string) => PatientInvite;
+  acceptPatientInvite: (token: string, password?: string) => boolean;
 
   // Ações do Paciente
   submitExerciseResponse: (assignedExerciseId: string, responses: Record<string, any>, notes?: string) => void;
@@ -94,6 +113,9 @@ interface PsiContextType {
   getPatientMoodLogs: () => MoodLog[];
   getPatientAppointments: () => Appointment[];
   getPatientContents: () => PatientContent[];
+  getPatientPsychometricResults: (patientId?: string) => PsychometricResult[];
+  getPatientCognitiveDiagrams: (patientId?: string) => CognitiveDiagram[];
+  getPatientVoiceAnchors: (patientId?: string) => VoiceAnchor[];
   getCurrentUserNotifications: () => InAppNotification[];
 
   // Utilidades
@@ -102,7 +124,7 @@ interface PsiContextType {
 
 const PsiContext = createContext<PsiContextType | undefined>(undefined);
 
-const LOCAL_STORAGE_KEY = 'psiapp_state_v2';
+const LOCAL_STORAGE_KEY = 'psiapp_state_v3';
 
 export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentRole, setCurrentRole] = useState<UserRole>('psychologist');
@@ -120,6 +142,10 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [contentItems, setContentItems] = useState<ContentItem[]>(INITIAL_CONTENT_ITEMS);
   const [patientContents, setPatientContents] = useState<PatientContent[]>(INITIAL_PATIENT_CONTENTS);
   const [notifications, setNotifications] = useState<InAppNotification[]>(INITIAL_NOTIFICATIONS);
+  const [psychometricResults, setPsychometricResults] = useState<PsychometricResult[]>(INITIAL_PSYCHOMETRIC_RESULTS);
+  const [cognitiveDiagrams, setCognitiveDiagrams] = useState<CognitiveDiagram[]>(INITIAL_COGNITIVE_DIAGRAMS);
+  const [voiceAnchors, setVoiceAnchors] = useState<VoiceAnchor[]>(INITIAL_VOICE_ANCHORS);
+  const [patientInvites, setPatientInvites] = useState<PatientInvite[]>(INITIAL_INVITES);
 
   // Carregar do LocalStorage na montagem
   useEffect(() => {
@@ -138,6 +164,10 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (parsed.contentItems) setContentItems(parsed.contentItems);
         if (parsed.patientContents) setPatientContents(parsed.patientContents);
         if (parsed.notifications) setNotifications(parsed.notifications);
+        if (parsed.psychometricResults) setPsychometricResults(parsed.psychometricResults);
+        if (parsed.cognitiveDiagrams) setCognitiveDiagrams(parsed.cognitiveDiagrams);
+        if (parsed.voiceAnchors) setVoiceAnchors(parsed.voiceAnchors);
+        if (parsed.patientInvites) setPatientInvites(parsed.patientInvites);
         if (parsed.currentRole) setCurrentRole(parsed.currentRole);
         if (parsed.currentPatientId) setCurrentPatientId(parsed.currentPatientId);
       }
@@ -161,6 +191,10 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         contentItems,
         patientContents,
         notifications,
+        psychometricResults,
+        cognitiveDiagrams,
+        voiceAnchors,
+        patientInvites,
         currentRole,
         currentPatientId,
       };
@@ -180,6 +214,10 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     contentItems,
     patientContents,
     notifications,
+    psychometricResults,
+    cognitiveDiagrams,
+    voiceAnchors,
+    patientInvites,
     currentRole,
     currentPatientId,
   ]);
@@ -334,6 +372,7 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         payment_status: paymentStatus,
         price: price !== undefined ? price : a.price,
         receipt_number: receiptNumber || a.receipt_number || (paymentStatus.startsWith('paid') ? `REC-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}` : undefined),
+        paid_at: paymentStatus.startsWith('paid') ? new Date().toISOString() : undefined,
       };
     }));
   }, []);
@@ -467,15 +506,117 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   }, [contentItems, currentPsychologist, addNotification]);
 
+  // Novas Ferramentas Clínicas
+  const addPsychometricResult = useCallback((resultData: Omit<PsychometricResult, 'id' | 'taken_at'>) => {
+    const newResult: PsychometricResult = {
+      ...resultData,
+      id: `res-${Date.now()}`,
+      taken_at: new Date().toISOString(),
+    };
+    setPsychometricResults(prev => [newResult, ...prev]);
+
+    // Notificar psicóloga se gravidade alta ou risco
+    if (newResult.risk_flag || newResult.severity_level === 'Grave' || newResult.severity_level === 'Extremamente Severa') {
+      addNotification({
+        recipient_role: 'psychologist',
+        title: `⚠️ Alerta Clínico: ${newResult.scale_id.toUpperCase()} Elevado`,
+        message: `Resultado de ${newResult.scale_name} indicou gravidade ${newResult.severity_level} (Score: ${newResult.total_score}).`,
+        type: 'scale_completed',
+        read: false,
+        target_tab: 'pacientes',
+      });
+    }
+  }, [addNotification]);
+
+  const addCognitiveDiagram = useCallback((diagramData: Omit<CognitiveDiagram, 'id' | 'created_at'>) => {
+    const newDiagram: CognitiveDiagram = {
+      ...diagramData,
+      id: `diag-${Date.now()}`,
+      created_at: new Date().toISOString(),
+    };
+    setCognitiveDiagrams(prev => [newDiagram, ...prev]);
+  }, []);
+
+  const addVoiceAnchor = useCallback((anchorData: Omit<VoiceAnchor, 'id' | 'created_at'>) => {
+    const newAnchor: VoiceAnchor = {
+      ...anchorData,
+      id: `voice-${Date.now()}`,
+      created_at: new Date().toISOString(),
+    };
+    setVoiceAnchors(prev => [newAnchor, ...prev]);
+
+    addNotification({
+      recipient_role: 'patient',
+      recipient_patient_id: anchorData.patient_id,
+      title: 'Nova Âncora de Voz Gravada',
+      message: `Dra. Ana gravou um áudio terapêutico para você ouvir entre as sessões: "${anchorData.title}".`,
+      type: 'content_assigned',
+      read: false,
+      target_tab: 'entre_sessoes',
+    });
+  }, [addNotification]);
+
+  const createPatientInvite = useCallback((name: string, email: string, phone: string): PatientInvite => {
+    const token = `inv-${Math.random().toString(36).substr(2, 8)}-${Date.now().toString(36)}`;
+    const expires = new Date();
+    expires.setDate(expires.getDate() + 7);
+
+    const newInvite: PatientInvite = {
+      id: `invite-${Date.now()}`,
+      psychologist_id: currentPsychologist.id,
+      patient_name: name,
+      patient_email: email,
+      patient_phone: phone,
+      token,
+      status: 'pending',
+      expires_at: expires.toISOString(),
+      created_at: new Date().toISOString(),
+    };
+
+    setPatientInvites(prev => [newInvite, ...prev]);
+    return newInvite;
+  }, [currentPsychologist]);
+
+  const acceptPatientInvite = useCallback((token: string, password?: string): boolean => {
+    const invite = patientInvites.find(i => i.token === token && i.status === 'pending');
+    if (!invite) return false;
+
+    // Criar o paciente a partir do convite
+    const newPatient = addPatient({
+      full_name: invite.patient_name,
+      email: invite.patient_email,
+      phone: invite.patient_phone,
+      birth_date: '1995-01-01',
+      status: 'active',
+      clinical_notes_overview: 'Paciente cadastrado via convite seguro online.',
+      anamnesis_completed: false,
+    });
+
+    // Atualizar status do convite
+    setPatientInvites(prev => prev.map(i => i.id === invite.id ? { ...i, status: 'accepted', patient_id: newPatient.id } : i));
+
+    // Notificar psicóloga
+    addNotification({
+      recipient_role: 'psychologist',
+      title: 'Novo Paciente Registrado!',
+      message: `${invite.patient_name} aceitou o convite e ativou seu prontuário no PsiApp.`,
+      type: 'invite_accepted',
+      read: false,
+      target_tab: 'pacientes',
+    });
+
+    // Mudar para a visão do paciente recém-criado
+    switchRole('patient', newPatient.id);
+    return true;
+  }, [patientInvites, addPatient, addNotification, switchRole]);
+
   // Ações do Paciente
   const submitExerciseResponse = useCallback((assignedExerciseId: string, responses: Record<string, any>, notes?: string) => {
     let exerciseTitle = '';
-    let patientName = '';
 
     setAssignedExercises(prev => prev.map(a => {
       if (a.id !== assignedExerciseId) return a;
       exerciseTitle = a.title;
-      patientName = a.patient_name || 'Paciente';
       return {
         ...a,
         status: 'completed',
@@ -596,6 +737,21 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return patientContents.filter(pc => pc.patient_id === currentPatient.id);
   }, [patientContents, currentPatient]);
 
+  const getPatientPsychometricResults = useCallback((patientId?: string) => {
+    const targetId = patientId || currentPatient.id;
+    return psychometricResults.filter(r => r.patient_id === targetId);
+  }, [psychometricResults, currentPatient]);
+
+  const getPatientCognitiveDiagrams = useCallback((patientId?: string) => {
+    const targetId = patientId || currentPatient.id;
+    return cognitiveDiagrams.filter(d => d.patient_id === targetId);
+  }, [cognitiveDiagrams, currentPatient]);
+
+  const getPatientVoiceAnchors = useCallback((patientId?: string) => {
+    const targetId = patientId || currentPatient.id;
+    return voiceAnchors.filter(v => v.patient_id === targetId);
+  }, [voiceAnchors, currentPatient]);
+
   const resetToDemoData = useCallback(() => {
     localStorage.removeItem(LOCAL_STORAGE_KEY);
     setPatients(INITIAL_PATIENTS);
@@ -609,6 +765,10 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setContentItems(INITIAL_CONTENT_ITEMS);
     setPatientContents(INITIAL_PATIENT_CONTENTS);
     setNotifications(INITIAL_NOTIFICATIONS);
+    setPsychometricResults(INITIAL_PSYCHOMETRIC_RESULTS);
+    setCognitiveDiagrams(INITIAL_COGNITIVE_DIAGRAMS);
+    setVoiceAnchors(INITIAL_VOICE_ANCHORS);
+    setPatientInvites(INITIAL_INVITES);
     setCurrentPatientId(INITIAL_PATIENTS[0].id);
     setCurrentRole('psychologist');
   }, []);
@@ -632,6 +792,10 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         contentItems,
         patientContents,
         notifications,
+        psychometricResults,
+        cognitiveDiagrams,
+        voiceAnchors,
+        patientInvites,
         unreadNotificationsCount,
         markNotificationAsRead,
         markAllNotificationsAsRead,
@@ -649,6 +813,11 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         assignExercise,
         addExerciseFeedback,
         assignContentToPatient,
+        addPsychometricResult,
+        addCognitiveDiagram,
+        addVoiceAnchor,
+        createPatientInvite,
+        acceptPatientInvite,
         submitExerciseResponse,
         addDiaryEntry,
         updateDiaryEntry,
@@ -662,6 +831,9 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         getPatientMoodLogs,
         getPatientAppointments,
         getPatientContents,
+        getPatientPsychometricResults,
+        getPatientCognitiveDiagrams,
+        getPatientVoiceAnchors,
         getCurrentUserNotifications,
         resetToDemoData,
       }}

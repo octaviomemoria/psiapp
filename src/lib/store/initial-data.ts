@@ -11,7 +11,11 @@ import {
   MoodLog,
   ContentItem,
   PatientContent,
-  InAppNotification
+  InAppNotification,
+  PsychometricResult,
+  CognitiveDiagram,
+  VoiceAnchor,
+  PatientInvite
 } from '@/types/database';
 
 export const INITIAL_PSYCHOLOGIST_PROFILE: UserProfile = {
@@ -1260,6 +1264,80 @@ export const INITIAL_NOTIFICATIONS: InAppNotification[] = [
     read: true,
     target_tab: 'pacientes',
     created_at: '2026-08-23T18:00:00Z',
+  },
+];
+
+export const INITIAL_PSYCHOMETRIC_RESULTS: PsychometricResult[] = [
+  {
+    id: 'res-phq9-1',
+    patient_id: 'pat-mariana-costa',
+    psychologist_id: INITIAL_PSYCHOLOGIST.id,
+    scale_id: 'phq9',
+    scale_name: 'PHQ-9 (Questionário de Saúde do Paciente - Depressão)',
+    total_score: 6,
+    severity_level: 'Leve',
+    risk_flag: false,
+    answers: { 'q1': 1, 'q2': 1, 'q3': 1, 'q4': 1, 'q5': 0, 'q6': 1, 'q7': 1, 'q8': 0, 'q9': 0 },
+    clinical_interpretation: 'Sintomatologia depressiva de intensidade leve, associada principalmente a alterações de sono e energia.',
+    taken_at: '2026-08-20T10:30:00Z'
+  },
+  {
+    id: 'res-gad7-1',
+    patient_id: 'pat-mariana-costa',
+    psychologist_id: INITIAL_PSYCHOLOGIST.id,
+    scale_id: 'gad7',
+    scale_name: 'GAD-7 (Escala de Ansiedade Generalizada)',
+    total_score: 13,
+    severity_level: 'Moderada',
+    answers: { 'q1': 2, 'q2': 2, 'q3': 2, 'q4': 2, 'q5': 1, 'q6': 2, 'q7': 2 },
+    clinical_interpretation: 'Ansiedade clinicamente significativa em nível moderado. Indicação de reforço em reestruturação cognitiva e desfusão.',
+    taken_at: '2026-08-22T14:15:00Z'
+  }
+];
+
+export const INITIAL_COGNITIVE_DIAGRAMS: CognitiveDiagram[] = [
+  {
+    id: 'diag-1',
+    session_id: 'sess-1',
+    patient_id: 'pat-mariana-costa',
+    psychologist_id: INITIAL_PSYCHOLOGIST.id,
+    situation: 'Reunião de diretoria onde tive que apresentar os resultados trimestrais',
+    automatic_thought: 'Se eu cometer um erro, vão achar que sou incompetente e vão me demitir',
+    meaning_of_thought: 'Não sou boa o suficiente (Crença de Desamor/Desvalor)',
+    emotions: ['Ansiedade', 'Medo', 'Vergonha'],
+    emotion_intensity: 85,
+    physiological_reaction: 'Taquicardia, mãos suadas, nó na garganta e respiração curta',
+    behavior: 'Falei rápido demais, evitei contato visual e pedi desculpas sem necessidade',
+    alternative_thought: 'Já preparei essa apresentação, os dados estão sólidos e errar um detalhe não anula minha competência de anos.',
+    outcome_emotion_intensity: 35,
+    created_at: '2026-08-18T14:45:00Z'
+  }
+];
+
+export const INITIAL_VOICE_ANCHORS: VoiceAnchor[] = [
+  {
+    id: 'voice-1',
+    patient_id: 'pat-mariana-costa',
+    psychologist_id: INITIAL_PSYCHOLOGIST.id,
+    title: 'Âncora de Respiração & Desfusão Gravada na Sessão',
+    category: 'Regulação Emocional',
+    duration_seconds: 120,
+    transcript: 'Mariana, lembre-se do que combinamos: quando a mente disser "você não vai dar conta", respire fundo, sinta seus pés no chão e apenas observe o pensamento como uma nuvem passando.',
+    created_at: '2026-08-18T14:50:00Z'
+  }
+];
+
+export const INITIAL_INVITES: PatientInvite[] = [
+  {
+    id: 'inv-1',
+    psychologist_id: INITIAL_PSYCHOLOGIST.id,
+    token: 'convite-seguro-7f89a2bc',
+    patient_name: 'Roberto Silveira',
+    patient_email: 'roberto.silveira@email.com',
+    patient_phone: '(11) 98712-3456',
+    status: 'pending',
+    expires_at: '2026-09-05T23:59:59Z',
+    created_at: '2026-08-28T10:00:00Z'
   }
 ];
 

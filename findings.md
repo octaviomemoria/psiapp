@@ -1,16 +1,29 @@
-# Descobertas e Decisões de Design Clínico — Ferramentas Psicológicas
+# Descobertas e Levantamento Técnico — PsiApp
 
-## 1. Abordagens Terapêuticas & Mapeamento de Ferramentas
+## 1. Arquitetura e Estrutura do Código
+- **Next.js 14 App Router:** Aplicação SPA rica com componentes cliente interativos e renderização ultra-rápida.
+- **Supabase PostgreSQL:**
+  - 14 tabelas principais criadas com RLS ativado.
+  - Chaves estrangeiras e índices otimizados para consultas por psicólogo e paciente.
+- **Capacitor Integration:** Configuração pronta para compilação nativa em Android e iOS (`capacitor.config.ts`).
+- **Design System:** Tailwind CSS com paleta clínica relaxante (Emerald/Slate/Teal), dark mode nativo e suporte a acessibilidade.
 
-| Abordagem | Fundamentação Teórica | Ferramentas Selecionadas |
-|---|---|---|
-| **TCC (Beck)** | Reestruturação cognitiva, quebra de pensamentos automáticos e ativação comportamental. | 1. Descatastrofização & Evidências<br>2. Ativação Comportamental (Prazer/Domínio)<br>3. Exposição Gradual (SUDS)<br>4. Coping Cards |
-| **ACT (Hayes)** | Flexibilidade psicológica, aceitação, desfusão e vida orientada a valores. | 5. Bússola de Valores<br>6. Desfusão "Notando a Mente" |
-| **DBT (Linehan)** | Regulação emocional em crise e tolerância ao mal-estar. | 7. Protocolo TIPP<br>8. Chain Analysis<br>9. Habilidade STOP |
-| **CFT / Esquema (Gilbert / Young)** | Manejo do crítico interno, autocompaixão e modo adulto saudável. | 10. Carta de Autocompaixão<br>11. Crítico Interno x Adulto Saudável |
-| **Neuro / Sensorial** | Desaceleração do sistema nervoso simpático e higiene de ritmo biológico. | 12. Grounding 5-4-3-2-1<br>13. Diário do Sono |
+## 2. Conformidade Ética e Legal (CFP & LGPD)
+- **Segregação de Sigilo:** A tabela `session_private_notes` possui política RLS estrita onde apenas o psicólogo criador tem permissão de leitura.
+- **Diário Emocional:** Campo booleano `is_shared_with_psychologist` garante que relatos do paciente fiquem privados até que ele opte explicitamente por compartilhar.
+- **Botão de Crise SOS:** Integrado em todas as telas com discagem direta para CVV (188) e SAMU (192).
 
-## 2. Padrões de Interface (UX/UI)
-- As ferramentas de emergência (TIPP, STOP, 5-4-3-2-1) devem ser acessíveis com **no máximo 1 toque** da tela inicial do paciente ou do banner de apoio emocional.
-- Os exercícios de escrita reflexiva (Desfusão, Carta de Autocompaixão, RPD) devem possuir placeholders acolhedores com exemplos reais para evitar a sensação de "bloqueio de página em branco".
-- A biblioteca da psicóloga deve permitir filtrar por abordagem e atribuir a qualquer paciente em menos de 10 segundos.
+## 3. Catálogo Atual de Protocolos (13 Ferramentas)
+1. RPD - Registro de Pensamentos Disfuncionais (TCC)
+2. Descatastrofização (TCC)
+3. Desfusão Cognitiva "Folhas no Riacho" (ACT)
+4. Bússola de Valores (ACT)
+5. Protocolo TIPP de Regulação Rápida (DBT)
+6. Cartão de Enfrentamento / Coping Card (TCC/DBT)
+7. Modo Criança Vulnerável vs Adulto Saudável (Terapia do Esquema)
+8. Carta de Autocompaixão (CFT)
+9. Ancoragem Sensorial 5-4-3-2-1 (Mindfulness/Somatic)
+10. Diário de Higiene do Sono (Neuropsicologia)
+11. Roda das Emoções de Plutchik
+12. Análise em Cadeia de Comportamento (DBT)
+13. Técnica da Seta Descendente / Crenças Centrais (TCC)

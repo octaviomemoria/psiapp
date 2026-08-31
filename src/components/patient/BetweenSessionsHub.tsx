@@ -35,7 +35,9 @@ import { SensoryGroundingModal } from './tools/SensoryGroundingModal';
 import { TippEmergencyModal } from './tools/TippEmergencyModal';
 import { CopingCardsModal } from './tools/CopingCardsModal';
 import { SleepDiaryModal } from './tools/SleepDiaryModal';
+import { PsychometricScalesModal } from '@/components/common/PsychometricScalesModal';
 import { formatDate, formatRelativeDate } from '@/lib/utils';
+import { Volume2, Play, Brain } from 'lucide-react';
 
 interface BetweenSessionsHubProps {
   onNavigateTab: (tab: string) => void;
@@ -50,6 +52,8 @@ export const BetweenSessionsHub: React.FC<BetweenSessionsHubProps> = ({ onNaviga
     getPatientGoals,
     getPatientMoodLogs,
     getPatientContents,
+    getPatientVoiceAnchors,
+    getPatientPsychometricResults,
     updatePatientContentStatus,
   } = usePsi();
 
@@ -61,12 +65,16 @@ export const BetweenSessionsHub: React.FC<BetweenSessionsHubProps> = ({ onNaviga
   const [isTippModalOpen, setIsTippModalOpen] = useState(false);
   const [isCopingCardsOpen, setIsCopingCardsOpen] = useState(false);
   const [isSleepModalOpen, setIsSleepModalOpen] = useState(false);
+  const [isScalesModalOpen, setIsScalesModalOpen] = useState(false);
+  const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
 
   const exercises = getPatientAssignedExercises();
   const diaryEntries = getPatientDiaryEntries();
   const goals = getPatientGoals();
   const moodLogs = getPatientMoodLogs();
   const contents = getPatientContents();
+  const voiceAnchors = getPatientVoiceAnchors(currentPatient.id);
+  const psychometrics = getPatientPsychometricResults(currentPatient.id);
 
   const pendingExercises = exercises.filter(e => e.status === 'pending');
   const completedExercises = exercises.filter(e => e.status === 'completed' || e.status === 'reviewed');
@@ -422,6 +430,83 @@ export const BetweenSessionsHub: React.FC<BetweenSessionsHubProps> = ({ onNaviga
         </Card>
       </div>
 
+      {/* SEÇÃO EXTRA: ÂNCORAS DE VOZ & ESCALAS DE AUTOAVALIAÇÃO */}
+      <div className="grid md:grid-cols-2 gap-6">
+        {/* Âncoras de Voz */}
+        <Card className="p-5 space-y-3 bg-gradient-to-br from-emerald-50/50 to-teal-50/30 border-emerald-100">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-emerald-900 font-bold text-sm">
+              <Volume2 className="w-4 h-4 text-emerald-600" />
+              <span>Âncoras de Voz do Terapeuta</span>
+            </div>
+            <Badge variant="success" size="sm">
+              {voiceAnchors.length} áudio(s)
+            </Badge>
+          </div>
+          <p className="text-xs text-slate-600">
+            Mensagens de voz e orientações breves gravadas pela sua psicóloga para você ouvir quando precisar de regulação.
+          </p>
+
+          {voiceAnchors.length === 0 ? (
+            <p className="text-xs text-slate-400 py-3 text-center">Nenhum áudio de âncora gravado ainda.</p>
+          ) : (
+            <div className="space-y-2 pt-1">
+              {voiceAnchors.map(va => {
+                const isPlaying = playingAudioId === va.id;
+                return (
+                  <div key={va.id} className="p-3 bg-white rounded-xl border border-emerald-100 flex items-center justify-between gap-3 shadow-xs">
+                    <div className="space-y-0.5">
+                      <p className="text-xs font-bold text-slate-800">{va.title}</p>
+                      <p className="text-[11px] text-slate-500">{va.instruction || 'Ouça respirando profundamente.'}</p>
+                    </div>
+                    <Button
+                      size="sm"
+                      onClick={() => setPlayingAudioId(isPlaying ? null : va.id)}
+                      className={`text-xs flex items-center gap-1 shrink-0 ${isPlaying ? 'bg-rose-600 text-white' : 'bg-emerald-600 text-white'}`}
+                    >
+                      <Play className="w-3.5 h-3.5 fill-current" />
+                      <span>{isPlaying ? 'Pausar' : 'Ouvir (2m)'}</span>
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Card>
+
+        {/* Escalas Psicométricas */}
+        <Card className="p-5 space-y-3 bg-gradient-to-br from-purple-50/50 to-indigo-50/30 border-purple-100">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-purple-900 font-bold text-sm">
+              <Brain className="w-4 h-4 text-purple-600" />
+              <span>Autoavaliação Psicométrica</span>
+            </div>
+            <Button
+              size="sm"
+              onClick={() => setIsScalesModalOpen(true)}
+              className="text-xs bg-purple-600 hover:bg-purple-700 text-white font-semibold flex items-center gap-1"
+            >
+              <Brain className="w-3.5 h-3.5" />
+              Responder Escala
+            </Button>
+          </div>
+          <p className="text-xs text-slate-600">
+            Escalas padronizadas de saúde emocional (PHQ-9 e GAD-7) para acompanhar sua evolução de forma segura.
+          </p>
+
+          <div className="p-3 bg-white rounded-xl border border-purple-100 flex items-center justify-between">
+            <div>
+              <span className="text-xs font-bold text-slate-800">Última aplicação:</span>
+              <p className="text-[11px] text-slate-500">
+                {psychometrics.length > 0
+                  ? `${psychometrics[psychometrics.length - 1].scale_name} • Score: ${psychometrics[psychometrics.length - 1].total_score} pts (${psychometrics[psychometrics.length - 1].severity_level})`
+                  : 'Nenhuma escala realizada recentemente.'}
+              </p>
+            </div>
+          </div>
+        </Card>
+      </div>
+
       {/* Modais de Exercício e Humor */}
       <MoodCheckInModal
         isOpen={isMoodModalOpen}
@@ -453,6 +538,12 @@ export const BetweenSessionsHub: React.FC<BetweenSessionsHubProps> = ({ onNaviga
       <SleepDiaryModal
         isOpen={isSleepModalOpen}
         onClose={() => setIsSleepModalOpen(false)}
+      />
+
+      <PsychometricScalesModal
+        patientId={currentPatient.id}
+        isOpen={isScalesModalOpen}
+        onClose={() => setIsScalesModalOpen(false)}
       />
     </div>
   );
