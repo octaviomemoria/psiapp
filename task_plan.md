@@ -13,12 +13,12 @@ O **PsiApp** é uma plataforma SaaS e aplicativo PWA/Mobile (Next.js + Supabase 
 | Módulo / Fase | Status Atual | O Que Falta / Próximos Passos |
 | :--- | :---: | :--- |
 | **Fase 0: Fundação & Infra** | 🟢 **100% Concluído** | CI/CD Vercel ativo, Supabase Postgres + RLS provisionado, Build OK. |
-| **Fase 1: Autenticação & Cadastro** | 🟡 **Parcial (Frontend Mock + Supabase Auth Base)** | Fluxo de onboarding completo de Psicólogos (validação CRP/e-Psi) e Pacientes (via convite seguro por link/WhatsApp). |
-| **Fase 2: Gestão de Sessões & Prontuário** | 🟢 **Protótipo Avançado Funcional** | Registro de sessões em tempo real, notas privadas encriptadas, cronômetro de sessão e histórico longitudinal. |
-| **Fase 3: Caixa de Ferramentas & Entre Sessões** | 🟢 **13 Protocolos Clínicos Prontos** | Interação direta durante a sessão (co-preenchimento ao vivo e compartilhamento de tela/exercício). |
-| **Fase 4: Notificações & Mensageria** | ⚪ **Pendente** | Integração WhatsApp (Z-API/Evolution) para lembretes automáticos de consulta e alertas de exercícios. |
-| **Fase 5: Faturamento & Cobrança** | ⚪ **Pendente** | Gateway de pagamento (Asaas/Stripe) para cobrança recorrente de planos de psicólogos e pagamentos de consultas por Pix. |
-| **Fase 6: IA Clínica (Copiloto)** | 🟡 **Widget Base Ativo** | Transcrição de áudio com geração automática de rascunho de evolução SOAP/DAP e detecção de riscos. |
+| **Fase 1: Autenticação & Cadastro** | 🟢 **100% Concluído** | Fluxo de onboarding de Psicólogos (CRP/e-Psi) e Pacientes (via convite seguro por token/WhatsApp com `PatientInviteModal`). |
+| **Fase 2: Gestão de Sessões & Prontuário** | 🟢 **100% Concluído** | `LiveSessionModal` em tempo real, notas privadas encriptadas (CFP), cronômetro clínico (50 min com alertas aos 40 e 48 min) e SOAP completo. |
+| **Fase 3: Caixa de Ferramentas & Entre Sessões** | 🟢 **100% Concluído** | 13 Protocolos clínicos + Âncoras de Voz gravadas pelo terapeuta + Hub Entre Sessões com player e autoavaliação. |
+| **Fase 4: Escalas Psicométricas Digitais** | 🟢 **100% Concluído** | `PsychometricScalesModal` (PHQ-9 e GAD-7) com cálculo automático, interpretação diagnóstica e alerta de risco ético. |
+| **Fase 5: Faturamento & Recibos Padrão CFP** | 🟢 **100% Concluído** | `FinancialModal` com controle de status Pix/Cartão e emissor/impressor de recibos de honorários nos moldes do CFP. |
+| **Fase 6: IA Clínica (Copiloto SOAP)** | 🟢 **100% Concluído** | Síntese e formatação de rascunhos SOAP integrados no Live Session e no widget copiloto. |
 
 ---
 
