@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { usePsi } from '@/lib/store/psi-context';
 import { Header } from '@/components/common/Header';
 import { CrisisBanner } from '@/components/common/CrisisBanner';
@@ -25,7 +25,7 @@ import { EvolutionView } from '@/components/patient/EvolutionView';
 import { PatientProfileView } from '@/components/patient/PatientProfileView';
 
 export default function Home() {
-  const { currentRole, currentPatient } = usePsi();
+  const { currentRole, currentPatient, switchRole, acceptPatientInvite } = usePsi();
 
   // Abas do Psicólogo
   const [psychologistTab, setPsychologistTab] = useState<string>('dashboard');
@@ -33,6 +33,21 @@ export default function Home() {
 
   // Abas do Paciente
   const [patientTab, setPatientTab] = useState<string>('inicio');
+
+  // Detectar convite via link de URL (?invite=PSI-...)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const inviteToken = urlParams.get('invite');
+      if (inviteToken) {
+        const accepted = acceptPatientInvite(inviteToken);
+        if (accepted) {
+          switchRole('patient');
+          setPatientTab('inicio');
+        }
+      }
+    }
+  }, [acceptPatientInvite, switchRole]);
 
   const handleSelectPatientForDetail = (patientId: string) => {
     setSelectedPatientId(patientId);

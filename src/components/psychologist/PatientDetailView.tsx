@@ -71,6 +71,7 @@ type TabType = 'overview' | 'sessions' | 'goals' | 'exercises' | 'scales' | 'dia
 
 export const PatientDetailView: React.FC<PatientDetailViewProps> = ({ patientId, onBack }) => {
   const {
+    currentPsychologist,
     patients,
     sessions,
     goals,
@@ -158,7 +159,7 @@ export const PatientDetailView: React.FC<PatientDetailViewProps> = ({ patientId,
 
     addGoal({
       patient_id: patient.id,
-      psychologist_id: 'psychologist-ana-martins',
+      psychologist_id: currentPsychologist.id,
       title: goalTitle,
       description: goalDescription,
       category: goalCategory,
