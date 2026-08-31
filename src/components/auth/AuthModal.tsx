@@ -217,6 +217,23 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                       required
                     />
                   </div>
+                  <div className="col-span-3">
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Abordagem Teórica</label>
+                    <select
+                      value={approach}
+                      onChange={e => setApproach(e.target.value)}
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-teal-500 focus:outline-none"
+                    >
+                      <option value="TCC (Terapia Cognitivo-Comportamental)">TCC (Terapia Cognitivo-Comportamental)</option>
+                      <option value="Terapia de Aceitação e Compromisso (ACT)">Terapia de Aceitação e Compromisso (ACT)</option>
+                      <option value="Psicanálise">Psicanálise</option>
+                      <option value="Terapia Comportamental Dialética (DBT)">Terapia Comportamental Dialética (DBT)</option>
+                      <option value="Terapia Humanista / Centrada na Pessoa">Terapia Humanista / Centrada na Pessoa</option>
+                      <option value="Fenomenologia Existencial">Fenomenologia Existencial</option>
+                      <option value="Gestalt-Terapia">Gestalt-Terapia</option>
+                      <option value="Neuropsicologia & Terapia Breve">Neuropsicologia & Terapia Breve</option>
+                    </select>
+                  </div>
                 </div>
               )}
 

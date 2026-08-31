@@ -116,24 +116,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab, onS
               <Play className="w-4 h-4 fill-white" />
               Iniciar Sessão ao Vivo
             </Button>
-            <Button
-              variant="outline"
-              size="md"
+            <button
+              type="button"
               onClick={() => setIsInviteModalOpen(true)}
-              className="border-teal-400/40 text-white hover:bg-white/10 flex items-center gap-1.5"
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-xl bg-white/15 text-white border border-white/25 hover:bg-white/25 transition-all backdrop-blur-sm shadow-sm active:scale-[0.98]"
             >
-              <UserPlus className="w-4 h-4" />
+              <UserPlus className="w-4 h-4 text-teal-200" />
               Convidar Paciente
-            </Button>
-            <Button
-              variant="outline"
-              size="md"
+            </button>
+            <button
+              type="button"
               onClick={() => setIsSessionModalOpen(true)}
-              className="border-teal-400/40 text-white hover:bg-white/10"
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-xl bg-white/15 text-white border border-white/25 hover:bg-white/25 transition-all backdrop-blur-sm shadow-sm active:scale-[0.98]"
             >
-              <Plus className="w-4 h-4 mr-1" />
+              <Plus className="w-4 h-4 text-teal-200" />
               Registrar Sessão
-            </Button>
+            </button>
           </div>
         </div>
       </div>

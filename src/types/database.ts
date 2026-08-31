@@ -22,7 +22,9 @@ export type NotificationType =
   | 'content_assigned' 
   | 'diary_shared'
   | 'scale_completed'
-  | 'invite_accepted';
+  | 'invite_accepted'
+  | 'session_scheduled'
+  | 'session_completed';
 
 export interface InAppNotification {
   id: string;

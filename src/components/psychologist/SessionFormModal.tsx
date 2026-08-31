@@ -21,7 +21,7 @@ export const SessionFormModal: React.FC<SessionFormModalProps> = ({
   patientId,
   sessionToEdit,
 }) => {
-  const { patients, currentPsychologist, addSession, updateSession, sessions } = usePsi();
+  const { patients, currentPsychologist, addSession, updateSession, sessions, addNotification } = usePsi();
 
   const [selectedPatientId, setSelectedPatientId] = useState<string>(patientId || patients[0]?.id || '');
   const [sessionDate, setSessionDate] = useState<string>(new Date().toISOString().slice(0, 16));
@@ -81,6 +81,7 @@ export const SessionFormModal: React.FC<SessionFormModalProps> = ({
     e.preventDefault();
     if (!selectedPatientId || !summary) return;
 
+    const patient = patients.find(p => p.id === selectedPatientId);
     const patientSessions = sessions.filter(s => s.patient_id === selectedPatientId);
     const sessionNumber = sessionToEdit ? sessionToEdit.session_number : patientSessions.length + 1;
 
@@ -114,8 +115,22 @@ export const SessionFormModal: React.FC<SessionFormModalProps> = ({
 
     if (sessionToEdit) {
       updateSession(sessionToEdit.id, sessionData, privateNotesData);
+      addNotification({
+        recipient_role: 'psychologist',
+        title: 'Sessão Atualizada com Sucesso',
+        message: `O registro da sessão com ${patient?.full_name || 'o paciente'} foi atualizado no prontuário.`,
+        type: 'session_scheduled',
+        read: false,
+      });
     } else {
       addSession(sessionData, privateNotesData);
+      addNotification({
+        recipient_role: 'psychologist',
+        title: 'Nova Sessão Registrada',
+        message: `Sessão #${sessionNumber} com ${patient?.full_name || 'o paciente'} foi registrada e arquivada com sigilo.`,
+        type: 'session_scheduled',
+        read: false,
+      });
     }
 
     onClose();
