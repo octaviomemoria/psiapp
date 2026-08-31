@@ -43,14 +43,24 @@ import {
   INITIAL_VOICE_ANCHORS,
   INITIAL_INVITES
 } from './initial-data';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
+import { SupabaseService } from '@/lib/supabase/service';
+import type { User as SupabaseUser } from '@supabase/supabase-js';
 
 interface PsiContextType {
-  // Estado de Perfil e Autenticação
+  // Estado de Perfil e Autenticação Supabase
+  authUser: SupabaseUser | null;
+  authProfile: UserProfile | null;
+  isLiveProduction: boolean;
+  isAuthLoading: boolean;
+  activeDataSource: 'supabase_live' | 'demo_mode';
   currentRole: UserRole;
   currentPsychologist: Psychologist;
   currentPatient: Patient;
   switchRole: (role: UserRole, patientId?: string) => void;
   selectPatientForView: (patientId: string) => void;
+  toggleDataSource: (source: 'supabase_live' | 'demo_mode') => void;
+  signOut: () => Promise<void>;
 
   // Coleções de Dados
   patients: Patient[];
@@ -120,16 +130,23 @@ interface PsiContextType {
 
   // Utilidades
   resetToDemoData: () => void;
+  loadLiveDataFromSupabase: () => Promise<void>;
 }
 
 const PsiContext = createContext<PsiContextType | undefined>(undefined);
 
 const LOCAL_STORAGE_KEY = 'psiapp_state_v3';
+const DATA_SOURCE_KEY = 'psiapp_data_source_v1';
 
 export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [authUser, setAuthUser] = useState<SupabaseUser | null>(null);
+  const [authProfile, setAuthProfile] = useState<UserProfile | null>(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const [activeDataSource, setActiveDataSource] = useState<'supabase_live' | 'demo_mode'>('demo_mode');
+
   const [currentRole, setCurrentRole] = useState<UserRole>('psychologist');
-  const [currentPsychologist] = useState<Psychologist>(INITIAL_PSYCHOLOGIST);
-  const [currentPatientId, setCurrentPatientId] = useState<string>(INITIAL_PATIENTS[0].id);
+  const [currentPsychologist, setCurrentPsychologist] = useState<Psychologist>(INITIAL_PSYCHOLOGIST);
+  const [currentPatientId, setCurrentPatientId] = useState<string>(INITIAL_PATIENTS[0]?.id || '');
 
   const [patients, setPatients] = useState<Patient[]>(INITIAL_PATIENTS);
   const [appointments, setAppointments] = useState<Appointment[]>(INITIAL_APPOINTMENTS);
@@ -147,11 +164,104 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [voiceAnchors, setVoiceAnchors] = useState<VoiceAnchor[]>(INITIAL_VOICE_ANCHORS);
   const [patientInvites, setPatientInvites] = useState<PatientInvite[]>(INITIAL_INVITES);
 
-  // Carregar do LocalStorage na montagem
+  const isLiveProduction = activeDataSource === 'supabase_live' && Boolean(authUser);
+
+  // Carregar dados reais do Supabase para o usuário autenticado
+  const loadLiveDataFromSupabase = useCallback(async () => {
+    if (!isSupabaseConfigured || !supabase) return;
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const user = sessionData?.session?.user;
+      if (!user) return;
+
+      const profile = await SupabaseService.getCurrentUserProfile(user.id);
+      if (profile) {
+        setAuthProfile(profile);
+        setCurrentRole(profile.role as UserRole);
+
+        if (profile.role === 'psychologist') {
+          const psychData = await SupabaseService.getPsychologistByProfileId(profile.id);
+          if (psychData) {
+            setCurrentPsychologist(psychData);
+          }
+
+          // Carregar pacientes reais do psicólogo
+          const livePatients = await SupabaseService.getPatients(psychData?.id || profile.id);
+          if (livePatients && livePatients.length > 0) {
+            setPatients(livePatients);
+            setCurrentPatientId(livePatients[0].id);
+          } else {
+            setPatients([]);
+          }
+
+          // Carregar agendamentos e sessões reais
+          const liveAppointments = await SupabaseService.getAppointments(psychData?.id);
+          setAppointments(liveAppointments);
+
+          const liveSessions = await SupabaseService.getSessions(psychData?.id);
+          setSessions(liveSessions);
+
+          const liveGoals = await SupabaseService.getGoals();
+          setGoals(liveGoals);
+
+          const liveInvites = await SupabaseService.getPatientInvites(psychData?.id || profile.id);
+          setPatientInvites(liveInvites);
+        }
+      }
+    } catch (err) {
+      console.warn('Erro ao carregar dados do Supabase:', err);
+    }
+  }, []);
+
+  // Monitorar Autenticação do Supabase
+  useEffect(() => {
+    if (!isSupabaseConfigured || !supabase) {
+      setIsAuthLoading(false);
+      return;
+    }
+
+    // Obter sessão inicial
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      const user = session?.user ?? null;
+      setAuthUser(user);
+      if (user) {
+        setActiveDataSource('supabase_live');
+        loadLiveDataFromSupabase();
+      }
+      setIsAuthLoading(false);
+    });
+
+    // Escutar alterações de autenticação
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      const user = session?.user ?? null;
+      setAuthUser(user);
+      if (user) {
+        setActiveDataSource('supabase_live');
+        await loadLiveDataFromSupabase();
+      } else {
+        if (event === 'SIGNED_OUT') {
+          setActiveDataSource('demo_mode');
+          resetToDemoData();
+        }
+      }
+      setIsAuthLoading(false);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [loadLiveDataFromSupabase]);
+
+  // Carregar do LocalStorage na montagem (modo demo / persistência offline)
   useEffect(() => {
     try {
+      const savedSource = localStorage.getItem(DATA_SOURCE_KEY);
+      if (savedSource === 'supabase_live' || savedSource === 'demo_mode') {
+        setActiveDataSource(savedSource);
+      }
+
       const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
-      if (saved) {
+      if (saved && (!authUser || activeDataSource === 'demo_mode')) {
         const parsed = JSON.parse(saved);
         if (parsed.patients) setPatients(parsed.patients);
         if (parsed.appointments) setAppointments(parsed.appointments);
@@ -174,11 +284,12 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch (e) {
       console.warn('Erro ao restaurar dados do localStorage:', e);
     }
-  }, []);
+  }, [authUser, activeDataSource]);
 
   // Salvar no LocalStorage a cada alteração
   useEffect(() => {
     try {
+      localStorage.setItem(DATA_SOURCE_KEY, activeDataSource);
       const stateToSave = {
         patients,
         appointments,
@@ -220,9 +331,17 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     patientInvites,
     currentRole,
     currentPatientId,
+    activeDataSource
   ]);
 
-  const currentPatient = patients.find(p => p.id === currentPatientId) || patients[0];
+  const currentPatient = patients.find(p => p.id === currentPatientId) || patients[0] || {
+    id: 'pat-default',
+    full_name: 'Nenhum paciente selecionado',
+    email: '',
+    phone: '',
+    status: 'active' as const,
+    started_at: new Date().toISOString()
+  };
 
   const switchRole = useCallback((role: UserRole, patientId?: string) => {
     setCurrentRole(role);
@@ -233,6 +352,25 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const selectPatientForView = useCallback((patientId: string) => {
     setCurrentPatientId(patientId);
+  }, []);
+
+  const toggleDataSource = useCallback((source: 'supabase_live' | 'demo_mode') => {
+    setActiveDataSource(source);
+    if (source === 'demo_mode') {
+      resetToDemoData();
+    } else {
+      loadLiveDataFromSupabase();
+    }
+  }, [loadLiveDataFromSupabase]);
+
+  const signOut = useCallback(async () => {
+    if (isSupabaseConfigured && supabase) {
+      await supabase.auth.signOut();
+    }
+    setAuthUser(null);
+    setAuthProfile(null);
+    setActiveDataSource('demo_mode');
+    resetToDemoData();
   }, []);
 
   const addNotification = useCallback((notificationData: Omit<InAppNotification, 'id' | 'created_at'>) => {
@@ -279,9 +417,22 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updated_at: new Date().toISOString(),
       }
     };
+    
+    // Atualização otimista
     setPatients(prev => [newPatient, ...prev]);
+    setCurrentPatientId(newPatient.id);
+
+    // Sincronização com Supabase
+    if (isSupabaseConfigured && isLiveProduction) {
+      SupabaseService.insertPatient({
+        ...patientData,
+        status: 'active',
+        started_at: new Date().toISOString()
+      });
+    }
+
     return newPatient;
-  }, []);
+  }, [isLiveProduction]);
 
   const updatePatient = useCallback((id: string, updates: Partial<Patient>) => {
     setPatients(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
@@ -316,7 +467,16 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     setSessions(prev => [newSession, ...prev]);
-  }, []);
+
+    // Sincronizar com Supabase
+    if (isSupabaseConfigured && isLiveProduction) {
+      SupabaseService.insertSession({
+        ...sessionData,
+        status: 'finalized',
+        session_date: new Date().toISOString()
+      });
+    }
+  }, [isLiveProduction]);
 
   const updateSession = useCallback((
     id: string,
@@ -348,21 +508,22 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     setAppointments(prev => [...prev, newAppointment]);
 
-    // Notificar paciente sobre novo agendamento
-    addNotification({
-      recipient_role: 'patient',
-      recipient_patient_id: appointmentData.patient_id,
-      title: 'Nova Consulta Agendada',
-      message: `Uma consulta foi agendada para ${new Date(appointmentData.starts_at).toLocaleDateString('pt-BR')} às ${new Date(appointmentData.starts_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}.`,
-      type: 'appointment_reminder',
-      read: false,
-      target_tab: 'inicio',
-    });
-  }, [addNotification]);
+    if (isSupabaseConfigured && isLiveProduction) {
+      SupabaseService.insertAppointment({
+        ...appointmentData,
+        price: appointmentData.price || 220,
+        payment_status: appointmentData.payment_status || 'pending',
+      });
+    }
+  }, [isLiveProduction]);
 
   const updateAppointmentStatus = useCallback((id: string, status: AppointmentStatus, cancellationReason?: string) => {
     setAppointments(prev => prev.map(a => a.id === id ? { ...a, status, cancellation_reason: cancellationReason } : a));
-  }, []);
+
+    if (isSupabaseConfigured && isLiveProduction) {
+      SupabaseService.updateAppointment(id, { status, cancellation_reason: cancellationReason });
+    }
+  }, [isLiveProduction]);
 
   const updateAppointmentPayment = useCallback((id: string, paymentStatus: PaymentStatus, price?: number, receiptNumber?: string) => {
     setAppointments(prev => prev.map(a => {
@@ -371,11 +532,18 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         ...a,
         payment_status: paymentStatus,
         price: price !== undefined ? price : a.price,
-        receipt_number: receiptNumber || a.receipt_number || (paymentStatus.startsWith('paid') ? `REC-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}` : undefined),
-        paid_at: paymentStatus.startsWith('paid') ? new Date().toISOString() : undefined,
+        receipt_number: receiptNumber || a.receipt_number || `REC-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`,
+        paid_at: paymentStatus.startsWith('paid') ? new Date().toISOString() : a.paid_at,
       };
     }));
-  }, []);
+
+    if (isSupabaseConfigured && isLiveProduction) {
+      SupabaseService.updateAppointment(id, {
+        payment_status: paymentStatus,
+        paid_at: paymentStatus.startsWith('paid') ? new Date().toISOString() : undefined,
+      });
+    }
+  }, [isLiveProduction]);
 
   const addGoal = useCallback((goalData: Omit<Goal, 'id' | 'created_at' | 'updated_at'>) => {
     const newGoal: Goal = {
@@ -386,17 +554,10 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     setGoals(prev => [newGoal, ...prev]);
 
-    // Notificar paciente
-    addNotification({
-      recipient_role: 'patient',
-      recipient_patient_id: goalData.patient_id,
-      title: 'Novo Objetivo Terapêutico',
-      message: `Dra. Ana Martins definiu uma nova meta: "${goalData.title}".`,
-      type: 'content_assigned',
-      read: false,
-      target_tab: 'entre_sessoes',
-    });
-  }, [addNotification]);
+    if (isSupabaseConfigured && isLiveProduction) {
+      SupabaseService.insertGoal(goalData);
+    }
+  }, [isLiveProduction]);
 
   const updateGoal = useCallback((id: string, updates: Partial<Goal>) => {
     setGoals(prev => prev.map(g => g.id === id ? { ...g, ...updates, updated_at: new Date().toISOString() } : g));
@@ -414,50 +575,46 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const assignExercise = useCallback((patientId: string, templateId: string, customInstructions?: string, dueDate?: string) => {
     const template = exerciseTemplates.find(t => t.id === templateId);
-    if (!template) return;
-    const targetPatient = patients.find(p => p.id === patientId);
-
+    const instructions = customInstructions || template?.instructions || '';
     const newAssignment: AssignedExercise = {
-      id: `asg-${Date.now()}`,
-      template_id: template.id,
+      id: `assign-${Date.now()}`,
+      template_id: templateId,
       psychologist_id: currentPsychologist.id,
       patient_id: patientId,
-      patient_name: targetPatient?.full_name,
-      title: template.title,
-      instructions: customInstructions || template.instructions,
-      schema_fields: template.schema_fields,
+      title: template?.title || 'Exercício Terapêutico',
+      instructions,
+      schema_fields: template?.schema_fields || [],
       due_date: dueDate,
       status: 'pending',
       assigned_at: new Date().toISOString(),
+      template,
     };
     setAssignedExercises(prev => [newAssignment, ...prev]);
 
-    // Notificar paciente
-    addNotification({
-      recipient_role: 'patient',
-      recipient_patient_id: patientId,
-      title: 'Nova Atividade Terapêutica',
-      message: `Dra. Ana Martins atribuiu o exercício "${template.title}" para você realizar entre as sessões.`,
-      type: 'content_assigned',
-      read: false,
-      target_tab: 'entre_sessoes',
-    });
-  }, [exerciseTemplates, patients, currentPsychologist, addNotification]);
+    if (isSupabaseConfigured && isLiveProduction) {
+      SupabaseService.insertAssignedExercise({
+        template_id: templateId,
+        psychologist_id: currentPsychologist.id,
+        patient_id: patientId,
+        title: template?.title || 'Exercício Terapêutico',
+        instructions,
+        schema_fields: template?.schema_fields || [],
+        due_date: dueDate,
+        status: 'pending',
+        assigned_at: new Date().toISOString(),
+      });
+    }
+  }, [exerciseTemplates, currentPsychologist, isLiveProduction]);
 
   const addExerciseFeedback = useCallback((assignmentId: string, feedbackText: string, clinicalObservations?: string) => {
-    let patientId = '';
-    let exerciseTitle = '';
-
-    setAssignedExercises(prev => prev.map(a => {
-      if (a.id !== assignmentId) return a;
-      patientId = a.patient_id;
-      exerciseTitle = a.title;
+    setAssignedExercises(prev => prev.map(e => {
+      if (e.id !== assignmentId) return e;
       return {
-        ...a,
+        ...e,
         status: 'reviewed',
         reviewed_at: new Date().toISOString(),
         feedback: {
-          id: `fdb-${Date.now()}`,
+          id: `fb-${Date.now()}`,
           assigned_exercise_id: assignmentId,
           psychologist_id: currentPsychologist.id,
           feedback_text: feedbackText,
@@ -466,47 +623,23 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       };
     }));
-
-    if (patientId) {
-      addNotification({
-        recipient_role: 'patient',
-        recipient_patient_id: patientId,
-        title: 'Feedback Terapêutico Recebido',
-        message: `Dra. Ana Martins avaliou o exercício "${exerciseTitle}" e deixou um comentário acolhedor.`,
-        type: 'feedback_received',
-        read: false,
-        target_tab: 'entre_sessoes',
-      });
-    }
-  }, [currentPsychologist, addNotification]);
+  }, [currentPsychologist]);
 
   const assignContentToPatient = useCallback((patientId: string, contentId: string, personalizedNote?: string) => {
     const content = contentItems.find(c => c.id === contentId);
-    if (!content) return;
-    const newAssignment: PatientContent = {
-      id: `p-cnt-${Date.now()}`,
+    const newPatientContent: PatientContent = {
+      id: `pc-${Date.now()}`,
       content_id: contentId,
       patient_id: patientId,
       psychologist_id: currentPsychologist.id,
-      content,
       personalized_note: personalizedNote,
       status: 'unread',
       assigned_at: new Date().toISOString(),
+      content,
     };
-    setPatientContents(prev => [newAssignment, ...prev]);
+    setPatientContents(prev => [newPatientContent, ...prev]);
+  }, [contentItems, currentPsychologist]);
 
-    addNotification({
-      recipient_role: 'patient',
-      recipient_patient_id: patientId,
-      title: 'Novo Conteúdo Recomendado',
-      message: `Dra. Ana Martins recomendou o material "${content.title}".`,
-      type: 'content_assigned',
-      read: false,
-      target_tab: 'entre_sessoes',
-    });
-  }, [contentItems, currentPsychologist, addNotification]);
-
-  // Novas Ferramentas Clínicas
   const addPsychometricResult = useCallback((resultData: Omit<PsychometricResult, 'id' | 'taken_at'>) => {
     const newResult: PsychometricResult = {
       ...resultData,
@@ -515,18 +648,13 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     setPsychometricResults(prev => [newResult, ...prev]);
 
-    // Notificar psicóloga se gravidade alta ou risco
-    if (newResult.risk_flag || newResult.severity_level === 'Grave' || newResult.severity_level === 'Extremamente Severa') {
-      addNotification({
-        recipient_role: 'psychologist',
-        title: `⚠️ Alerta Clínico: ${newResult.scale_id.toUpperCase()} Elevado`,
-        message: `Resultado de ${newResult.scale_name} indicou gravidade ${newResult.severity_level} (Score: ${newResult.total_score}).`,
-        type: 'scale_completed',
-        read: false,
-        target_tab: 'pacientes',
+    if (isSupabaseConfigured && isLiveProduction) {
+      SupabaseService.insertPsychometricResult({
+        ...resultData,
+        taken_at: new Date().toISOString()
       });
     }
-  }, [addNotification]);
+  }, [isLiveProduction]);
 
   const addCognitiveDiagram = useCallback((diagramData: Omit<CognitiveDiagram, 'id' | 'created_at'>) => {
     const newDiagram: CognitiveDiagram = {
@@ -540,108 +668,73 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const addVoiceAnchor = useCallback((anchorData: Omit<VoiceAnchor, 'id' | 'created_at'>) => {
     const newAnchor: VoiceAnchor = {
       ...anchorData,
-      id: `voice-${Date.now()}`,
+      id: `va-${Date.now()}`,
       created_at: new Date().toISOString(),
     };
     setVoiceAnchors(prev => [newAnchor, ...prev]);
-
-    addNotification({
-      recipient_role: 'patient',
-      recipient_patient_id: anchorData.patient_id,
-      title: 'Nova Âncora de Voz Gravada',
-      message: `Dra. Ana gravou um áudio terapêutico para você ouvir entre as sessões: "${anchorData.title}".`,
-      type: 'content_assigned',
-      read: false,
-      target_tab: 'entre_sessoes',
-    });
-  }, [addNotification]);
+  }, []);
 
   const createPatientInvite = useCallback((name: string, email: string, phone: string): PatientInvite => {
-    const token = `inv-${Math.random().toString(36).substr(2, 8)}-${Date.now().toString(36)}`;
-    const expires = new Date();
-    expires.setDate(expires.getDate() + 7);
-
+    const token = `inv_${Date.now().toString(36)}_${Math.random().toString(36).substr(2, 6)}`;
     const newInvite: PatientInvite = {
-      id: `invite-${Date.now()}`,
+      id: `inv-${Date.now()}`,
       psychologist_id: currentPsychologist.id,
+      token,
       patient_name: name,
       patient_email: email,
       patient_phone: phone,
-      token,
       status: 'pending',
-      expires_at: expires.toISOString(),
+      expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
       created_at: new Date().toISOString(),
     };
-
     setPatientInvites(prev => [newInvite, ...prev]);
-    return newInvite;
-  }, [currentPsychologist]);
 
-  const acceptPatientInvite = useCallback((token: string, password?: string): boolean => {
+    if (isSupabaseConfigured && isLiveProduction) {
+      SupabaseService.insertPatientInvite(newInvite);
+    }
+
+    return newInvite;
+  }, [currentPsychologist, isLiveProduction]);
+
+  const acceptPatientInvite = useCallback((token: string): boolean => {
     const invite = patientInvites.find(i => i.token === token && i.status === 'pending');
     if (!invite) return false;
 
-    // Criar o paciente a partir do convite
-    const newPatient = addPatient({
+    setPatientInvites(prev => prev.map(i => i.id === invite.id ? { ...i, status: 'accepted' } : i));
+    
+    // Criar paciente correspondente se não existir
+    addPatient({
       full_name: invite.patient_name,
       email: invite.patient_email,
       phone: invite.patient_phone,
       birth_date: '1995-01-01',
+      gender: 'Não informado',
       status: 'active',
-      clinical_notes_overview: 'Paciente cadastrado via convite seguro online.',
-      anamnesis_completed: false,
+      clinical_notes_overview: 'Paciente cadastrado via convite de onboarding seguro.'
     });
 
-    // Atualizar status do convite
-    setPatientInvites(prev => prev.map(i => i.id === invite.id ? { ...i, status: 'accepted', patient_id: newPatient.id } : i));
-
-    // Notificar psicóloga
-    addNotification({
-      recipient_role: 'psychologist',
-      title: 'Novo Paciente Registrado!',
-      message: `${invite.patient_name} aceitou o convite e ativou seu prontuário no PsiApp.`,
-      type: 'invite_accepted',
-      read: false,
-      target_tab: 'pacientes',
-    });
-
-    // Mudar para a visão do paciente recém-criado
-    switchRole('patient', newPatient.id);
     return true;
-  }, [patientInvites, addPatient, addNotification, switchRole]);
+  }, [patientInvites, addPatient]);
 
-  // Ações do Paciente
   const submitExerciseResponse = useCallback((assignedExerciseId: string, responses: Record<string, any>, notes?: string) => {
-    let exerciseTitle = '';
-
-    setAssignedExercises(prev => prev.map(a => {
-      if (a.id !== assignedExerciseId) return a;
-      exerciseTitle = a.title;
+    setAssignedExercises(prev => prev.map(e => {
+      if (e.id !== assignedExerciseId) return e;
       return {
-        ...a,
+        ...e,
         status: 'completed',
         completed_at: new Date().toISOString(),
         answer: {
           id: `ans-${Date.now()}`,
           assigned_exercise_id: assignedExerciseId,
-          patient_id: a.patient_id,
+          patient_id: currentPatient.id,
           responses,
           patient_notes: notes,
           submitted_at: new Date().toISOString(),
+          created_at: new Date().toISOString(),
         }
       };
     }));
-
-    // Notificar psicóloga
-    addNotification({
-      recipient_role: 'psychologist',
-      title: 'Exercício Concluído',
-      message: `${currentPatient.full_name} respondeu e enviou a atividade "${exerciseTitle}".`,
-      type: 'exercise_completed',
-      read: false,
-      target_tab: 'pacientes',
-    });
-  }, [currentPatient, addNotification]);
+  }, [currentPatient]);
 
   const addDiaryEntry = useCallback((entryData: Omit<DiaryEntry, 'id' | 'patient_id' | 'created_at' | 'updated_at'>) => {
     const newEntry: DiaryEntry = {
@@ -653,48 +746,38 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     setDiaryEntries(prev => [newEntry, ...prev]);
 
-    // Se compartilhado com o terapeuta, gera notificação
-    if (entryData.is_shared_with_psychologist) {
-      addNotification({
-        recipient_role: 'psychologist',
-        title: 'Novo Diário Compartilhado',
-        message: `${currentPatient.full_name} compartilhou uma reflexão no diário (${entryData.predominant_emotion} - ${entryData.intensity}/10).`,
-        type: 'diary_shared',
-        read: false,
-        target_tab: 'pacientes',
+    if (isSupabaseConfigured && isLiveProduction) {
+      SupabaseService.insertDiaryEntry({
+        ...entryData,
+        patient_id: currentPatient.id,
       });
     }
-  }, [currentPatient, addNotification]);
+  }, [currentPatient, isLiveProduction]);
 
   const updateDiaryEntry = useCallback((id: string, updates: Partial<DiaryEntry>) => {
-    setDiaryEntries(prev => prev.map(e => e.id === id ? { ...e, ...updates, updated_at: new Date().toISOString() } : e));
+    setDiaryEntries(prev => prev.map(d => d.id === id ? { ...d, ...updates, updated_at: new Date().toISOString() } : d));
   }, []);
 
   const deleteDiaryEntry = useCallback((id: string) => {
-    setDiaryEntries(prev => prev.filter(e => e.id !== id));
+    setDiaryEntries(prev => prev.filter(d => d.id !== id));
   }, []);
 
   const addMoodLog = useCallback((moodData: Omit<MoodLog, 'id' | 'patient_id' | 'logged_at'>) => {
-    const newMood: MoodLog = {
+    const newMoodLog: MoodLog = {
       ...moodData,
       id: `mood-${Date.now()}`,
       patient_id: currentPatient.id,
       logged_at: new Date().toISOString(),
     };
-    setMoodLogs(prev => [newMood, ...prev]);
+    setMoodLogs(prev => [...prev, newMoodLog]);
 
-    // Notificar psicóloga se humor for Muito mal (1) para atenção clínica acolhedora
-    if (moodData.mood_score === 1) {
-      addNotification({
-        recipient_role: 'psychologist',
-        title: 'Alerta Clínico: Check-in de Humor Baixo',
-        message: `${currentPatient.full_name} registrou humor "Muito mal" com intensidade ${moodData.intensity}/10 (${moodData.emotions.join(', ')}).`,
-        type: 'mood_checkin',
-        read: false,
-        target_tab: 'pacientes',
+    if (isSupabaseConfigured && isLiveProduction) {
+      SupabaseService.insertMoodLog({
+        ...moodData,
+        patient_id: currentPatient.id,
       });
     }
-  }, [currentPatient, addNotification]);
+  }, [currentPatient, isLiveProduction]);
 
   const updatePatientContentStatus = useCallback((patientContentId: string, status: 'unread' | 'viewed' | 'completed') => {
     setPatientContents(prev => prev.map(pc => {
@@ -708,52 +791,50 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }));
   }, []);
 
-  // Regras de Segurança e Resolução
-  const getVisibleDiaryEntriesForPsychologist = useCallback((patientId: string) => {
+  const getVisibleDiaryEntriesForPsychologist = useCallback((patientId: string): DiaryEntry[] => {
     return diaryEntries.filter(e => e.patient_id === patientId && e.is_shared_with_psychologist);
   }, [diaryEntries]);
 
-  const getPatientDiaryEntries = useCallback(() => {
+  const getPatientDiaryEntries = useCallback((): DiaryEntry[] => {
     return diaryEntries.filter(e => e.patient_id === currentPatient.id);
   }, [diaryEntries, currentPatient]);
 
-  const getPatientAssignedExercises = useCallback(() => {
+  const getPatientAssignedExercises = useCallback((): AssignedExercise[] => {
     return assignedExercises.filter(e => e.patient_id === currentPatient.id);
   }, [assignedExercises, currentPatient]);
 
-  const getPatientGoals = useCallback(() => {
+  const getPatientGoals = useCallback((): Goal[] => {
     return goals.filter(g => g.patient_id === currentPatient.id && g.visible_to_patient);
   }, [goals, currentPatient]);
 
-  const getPatientMoodLogs = useCallback(() => {
+  const getPatientMoodLogs = useCallback((): MoodLog[] => {
     return moodLogs.filter(m => m.patient_id === currentPatient.id);
   }, [moodLogs, currentPatient]);
 
-  const getPatientAppointments = useCallback(() => {
+  const getPatientAppointments = useCallback((): Appointment[] => {
     return appointments.filter(a => a.patient_id === currentPatient.id);
   }, [appointments, currentPatient]);
 
-  const getPatientContents = useCallback(() => {
+  const getPatientContents = useCallback((): PatientContent[] => {
     return patientContents.filter(pc => pc.patient_id === currentPatient.id);
   }, [patientContents, currentPatient]);
 
-  const getPatientPsychometricResults = useCallback((patientId?: string) => {
+  const getPatientPsychometricResults = useCallback((patientId?: string): PsychometricResult[] => {
     const targetId = patientId || currentPatient.id;
     return psychometricResults.filter(r => r.patient_id === targetId);
   }, [psychometricResults, currentPatient]);
 
-  const getPatientCognitiveDiagrams = useCallback((patientId?: string) => {
+  const getPatientCognitiveDiagrams = useCallback((patientId?: string): CognitiveDiagram[] => {
     const targetId = patientId || currentPatient.id;
     return cognitiveDiagrams.filter(d => d.patient_id === targetId);
   }, [cognitiveDiagrams, currentPatient]);
 
-  const getPatientVoiceAnchors = useCallback((patientId?: string) => {
+  const getPatientVoiceAnchors = useCallback((patientId?: string): VoiceAnchor[] => {
     const targetId = patientId || currentPatient.id;
     return voiceAnchors.filter(v => v.patient_id === targetId);
   }, [voiceAnchors, currentPatient]);
 
   const resetToDemoData = useCallback(() => {
-    localStorage.removeItem(LOCAL_STORAGE_KEY);
     setPatients(INITIAL_PATIENTS);
     setAppointments(INITIAL_APPOINTMENTS);
     setSessions(INITIAL_SESSIONS);
@@ -769,18 +850,27 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setCognitiveDiagrams(INITIAL_COGNITIVE_DIAGRAMS);
     setVoiceAnchors(INITIAL_VOICE_ANCHORS);
     setPatientInvites(INITIAL_INVITES);
-    setCurrentPatientId(INITIAL_PATIENTS[0].id);
     setCurrentRole('psychologist');
+    setCurrentPsychologist(INITIAL_PSYCHOLOGIST);
+    setCurrentPatientId(INITIAL_PATIENTS[0]?.id || '');
+    localStorage.removeItem(LOCAL_STORAGE_KEY);
   }, []);
 
   return (
     <PsiContext.Provider
       value={{
+        authUser,
+        authProfile,
+        isLiveProduction,
+        isAuthLoading,
+        activeDataSource,
         currentRole,
         currentPsychologist,
         currentPatient,
         switchRole,
         selectPatientForView,
+        toggleDataSource,
+        signOut,
         patients,
         appointments,
         sessions,
@@ -836,6 +926,7 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         getPatientVoiceAnchors,
         getCurrentUserNotifications,
         resetToDemoData,
+        loadLiveDataFromSupabase,
       }}
     >
       {children}

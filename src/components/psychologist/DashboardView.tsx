@@ -104,8 +104,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab, onS
               variant="primary"
               size="md"
               onClick={() => {
-                setSelectedPatientForLive(patients[0]);
-                setIsLiveSessionModalOpen(true);
+                if (patients && patients.length > 0) {
+                  setSelectedPatientForLive(patients[0]);
+                  setIsLiveSessionModalOpen(true);
+                } else {
+                  setIsInviteModalOpen(true);
+                }
               }}
               className="bg-emerald-500 text-white hover:bg-emerald-600 shadow-md font-semibold flex items-center gap-1.5"
             >
@@ -288,59 +292,74 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab, onS
             </CardHeader>
 
             <CardContent>
-              <div className="divide-y divide-slate-100">
-                {patients.slice(0, 4).map(patient => {
-                  const patientExercises = assignedExercises.filter(e => e.patient_id === patient.id && e.status === 'pending');
-                  const lastSession = sessions
-                    .filter(s => s.patient_id === patient.id)
-                    .sort((a, b) => new Date(b.session_date).getTime() - new Date(a.session_date).getTime())[0];
+              {patients.length === 0 ? (
+                <div className="py-6 text-center text-slate-500">
+                  <p className="text-xs">Nenhum paciente cadastrado ainda nesta conta.</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIsInviteModalOpen(true)}
+                    className="mt-3 text-xs text-teal-700 border-teal-300 hover:bg-teal-50"
+                  >
+                    <UserPlus className="w-3.5 h-3.5 mr-1" />
+                    Convidar Primeiro Paciente
+                  </Button>
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-100">
+                  {patients.slice(0, 4).map(patient => {
+                    const patientExercises = assignedExercises.filter(e => e.patient_id === patient.id && e.status === 'pending');
+                    const lastSession = sessions
+                      .filter(s => s.patient_id === patient.id)
+                      .sort((a, b) => new Date(b.session_date).getTime() - new Date(a.session_date).getTime())[0];
 
-                  return (
-                    <div
-                      key={patient.id}
-                      onClick={() => {
-                        onSelectPatient(patient.id);
-                        onNavigateTab('pacientes');
-                      }}
-                      className="py-3.5 flex items-center justify-between gap-4 hover:bg-slate-50/80 px-2 rounded-xl cursor-pointer transition-colors"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-sm overflow-hidden">
-                          {patient.profile?.avatar_url ? (
-                            <img src={patient.profile.avatar_url} alt={patient.full_name} className="w-full h-full object-cover" />
-                          ) : (
-                            patient.full_name.charAt(0)
-                          )}
+                    return (
+                      <div
+                        key={patient.id}
+                        onClick={() => {
+                          onSelectPatient(patient.id);
+                          onNavigateTab('pacientes');
+                        }}
+                        className="py-3.5 flex items-center justify-between gap-4 hover:bg-slate-50/80 px-2 rounded-xl cursor-pointer transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-sm overflow-hidden">
+                            {patient.profile?.avatar_url ? (
+                              <img src={patient.profile.avatar_url} alt={patient.full_name} className="w-full h-full object-cover" />
+                            ) : (
+                              patient.full_name.charAt(0)
+                            )}
+                          </div>
+                          <div>
+                            <p className="font-semibold text-sm text-slate-800">{patient.full_name}</p>
+                            <p className="text-xs text-slate-500 line-clamp-1 max-w-sm">
+                              {patient.clinical_notes_overview || 'Em acompanhamento terapêutico.'}
+                            </p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="font-semibold text-sm text-slate-800">{patient.full_name}</p>
-                          <p className="text-xs text-slate-500 line-clamp-1 max-w-sm">
-                            {patient.clinical_notes_overview || 'Em acompanhamento terapêutico.'}
-                          </p>
+
+                        <div className="flex items-center gap-3 text-right">
+                          <div className="hidden sm:block">
+                            <p className="text-xs text-slate-600">
+                              Última sessão: {lastSession ? formatRelativeDate(lastSession.session_date) : 'Recente'}
+                            </p>
+                            {patientExercises.length > 0 ? (
+                              <Badge variant="warning" size="sm" className="mt-0.5">
+                                {patientExercises.length} exercício(s) pendente(s)
+                              </Badge>
+                            ) : (
+                              <Badge variant="neutral" size="sm" className="mt-0.5">
+                                Em dia
+                              </Badge>
+                            )}
+                          </div>
+                          <ChevronRight className="w-4 h-4 text-slate-400" />
                         </div>
                       </div>
-
-                      <div className="flex items-center gap-3 text-right">
-                        <div className="hidden sm:block">
-                          <p className="text-xs text-slate-600">
-                            Última sessão: {lastSession ? formatRelativeDate(lastSession.session_date) : 'Recente'}
-                          </p>
-                          {patientExercises.length > 0 ? (
-                            <Badge variant="warning" size="sm" className="mt-0.5">
-                              {patientExercises.length} exercício(s) pendente(s)
-                            </Badge>
-                          ) : (
-                            <Badge variant="neutral" size="sm" className="mt-0.5">
-                              Em dia
-                            </Badge>
-                          )}
-                        </div>
-                        <ChevronRight className="w-4 h-4 text-slate-400" />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+                    );
+                  })}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>

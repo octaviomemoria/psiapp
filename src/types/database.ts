@@ -269,6 +269,7 @@ export interface AssignedExercise {
   assigned_at: string;
   completed_at?: string;
   reviewed_at?: string;
+  template?: ExerciseTemplate;
   answer?: ExerciseAnswer;
   feedback?: ExerciseFeedback;
 }

@@ -297,6 +297,38 @@ export const PatientListView: React.FC<PatientListViewProps> = ({ onSelectPatien
         })}
       </div>
 
+      {filteredPatients.length === 0 && (
+        <Card className="p-8 text-center bg-white border border-dashed border-slate-200">
+          <div className="w-16 h-16 rounded-2xl bg-teal-50 text-teal-600 mx-auto flex items-center justify-center mb-4">
+            <Users className="w-8 h-8" />
+          </div>
+          <h3 className="text-lg font-bold text-slate-800">Nenhum paciente encontrado</h3>
+          <p className="text-sm text-slate-500 max-w-md mx-auto mt-1 mb-6">
+            Você pode convidar seu primeiro paciente enviando um link de ativação segura ou cadastrá-lo manualmente agora mesmo.
+          </p>
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            <Button
+              variant="outline"
+              size="md"
+              onClick={() => setIsInviteModalOpen(true)}
+              className="border-teal-600 text-teal-700 hover:bg-teal-50 font-semibold"
+            >
+              <Share2 className="w-4 h-4 mr-2" />
+              Convidar via WhatsApp / Link
+            </Button>
+            <Button
+              variant="primary"
+              size="md"
+              onClick={() => setIsNewPatientModalOpen(true)}
+              className="font-semibold shadow-sm"
+            >
+              <UserPlus className="w-4 h-4 mr-2" />
+              Cadastrar Manualmente
+            </Button>
+          </div>
+        </Card>
+      )}
+
       {/* Modal Cadastro de Novo Paciente */}
       <Modal
         isOpen={isNewPatientModalOpen}
