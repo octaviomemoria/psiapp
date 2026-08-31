@@ -59,6 +59,94 @@ export const SupabaseService = {
     }
   },
 
+  async ensureProfileAndPsychologist(user: any, metadata?: any): Promise<{ profile: UserProfile; psychologist: Psychologist } | null> {
+    if (!isSupabaseConfigured || !supabase || !user) return null;
+    try {
+      let profile = await this.getCurrentUserProfile(user.id);
+      const displayName = metadata?.full_name || user.user_metadata?.full_name || user.email?.split('@')[0] || 'Psicólogo(a)';
+      const role = metadata?.role || user.user_metadata?.role || 'psychologist';
+      const crp = metadata?.crp_number || user.user_metadata?.crp_number || '';
+      const crpState = metadata?.crp_state || user.user_metadata?.crp_state || 'SP';
+
+      if (!profile) {
+        const { data: newProfile, error: profileErr } = await supabase
+          .from('profiles')
+          .insert({
+            user_id: user.id,
+            email: user.email,
+            role,
+            full_name: displayName,
+            display_name: displayName,
+          })
+          .select()
+          .single();
+
+        if (profileErr) {
+          console.warn('Erro ao criar perfil no Supabase:', profileErr.message);
+          profile = {
+            id: user.id,
+            user_id: user.id,
+            email: user.email,
+            role: role as any,
+            full_name: displayName,
+            display_name: displayName,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          };
+        } else {
+          profile = newProfile;
+        }
+      }
+
+      if (!profile) return null;
+
+      let psychologist = await this.getPsychologistByProfileId(profile.id);
+      if (!psychologist && profile.role === 'psychologist') {
+        const approach = metadata?.approach || user.user_metadata?.approach || 'TCC (Terapia Cognitivo-Comportamental)';
+        const psychCrp = metadata?.crp_number || user.user_metadata?.crp_number || '06/000000';
+        const psychState = metadata?.crp_state || user.user_metadata?.crp_state || 'SP';
+
+        const { data: newPsych, error: psychErr } = await supabase
+          .from('psychologists')
+          .insert({
+            profile_id: profile.id,
+            crp_number: psychCrp,
+            crp_state: psychState,
+            approach,
+            specialties: ['TCC', 'Clínica'],
+            bio: 'Atendimento clínico com sigilo profissional.',
+            session_default_price: 180,
+            session_default_duration_minutes: 50
+          })
+          .select('*, profile:profiles(*)')
+          .single();
+
+        if (psychErr) {
+          console.warn('Erro ao criar psicólogo no Supabase:', psychErr.message);
+          psychologist = {
+            id: `psych-${profile.id}`,
+            profile_id: profile.id,
+            crp_number: psychCrp,
+            crp_state: psychState,
+            approach,
+            specialties: ['TCC', 'Clínica'],
+            bio: 'Atendimento clínico com sigilo profissional.',
+            session_default_price: 180,
+            session_default_duration_minutes: 50,
+            profile
+          };
+        } else {
+          psychologist = newPsych;
+        }
+      }
+
+      return { profile, psychologist: psychologist! };
+    } catch (err) {
+      console.warn('Erro em ensureProfileAndPsychologist:', err);
+      return null;
+    }
+  },
+
   // ==========================================
   // PACIENTES
   // ==========================================

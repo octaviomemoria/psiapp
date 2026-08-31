@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { usePsi } from '@/lib/store/psi-context';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
+import { SupabaseService } from '@/lib/supabase/service';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -28,7 +29,7 @@ interface AuthModalProps {
 type AuthMode = 'login' | 'register_psychologist' | 'register_patient' | 'forgot_password';
 
 export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
-  const { switchRole } = usePsi();
+  const { switchRole, initializeNewPsychologistAccount, loadLiveDataFromSupabase } = usePsi();
 
   const [mode, setMode] = useState<AuthMode>('login');
   const [email, setEmail] = useState('');
@@ -42,6 +43,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  const resetForm = () => {
+    setEmail('');
+    setPassword('');
+    setFullName('');
+    setCrpNumber('');
+    setCrpState('SP');
+    setInviteCode('');
+    setErrorMsg(null);
+    setSuccessMsg(null);
+  };
 
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -57,7 +69,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
             password,
           });
           if (error) throw error;
-          setSuccessMsg('Login realizado com sucesso!');
+          if (data.user) {
+            await loadLiveDataFromSupabase();
+          }
+          setSuccessMsg('Login realizado com sucesso! Carregando consultório...');
           setTimeout(() => {
             onClose();
           }, 800);
@@ -76,7 +91,29 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
             }
           });
           if (error) throw error;
-          setSuccessMsg('Cadastro criado com sucesso! Verifique seu e-mail para confirmação.');
+
+          initializeNewPsychologistAccount({
+            fullName: fullName || 'Psicólogo(a)',
+            email,
+            crp: crpNumber || '06/000000',
+            crpState,
+            approach
+          });
+
+          if (data.user) {
+            await SupabaseService.ensureProfileAndPsychologist(data.user, {
+              full_name: fullName,
+              role: 'psychologist',
+              crp_number: crpNumber,
+              crp_state: crpState,
+              approach
+            });
+          }
+
+          setSuccessMsg(`Bem-vindo(a), ${fullName}! Seu consultório foi criado com sucesso.`);
+          setTimeout(() => {
+            onClose();
+          }, 900);
         } else if (mode === 'register_patient') {
           const { data, error } = await supabase.auth.signUp({
             email,
@@ -90,7 +127,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
             }
           });
           if (error) throw error;
+          switchRole('patient');
           setSuccessMsg('Cadastro do paciente realizado com sucesso!');
+          setTimeout(() => {
+            onClose();
+          }, 900);
         } else if (mode === 'forgot_password') {
           const { error } = await supabase.auth.resetPasswordForEmail(email, {
             redirectTo: `${window.location.origin}/reset-password`,
@@ -99,22 +140,29 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
           setSuccessMsg('E-mail de recuperação enviado! Verifique sua caixa de entrada.');
         }
       } else {
-        // Fallback no modo demo / local
-        setTimeout(() => {
-          if (mode === 'login') {
-            if (email.includes('ana') || email.includes('psi') || !email.includes('paciente')) {
-              switchRole('psychologist');
-              setSuccessMsg('Conectado como Psicóloga (Dra. Ana Martins)!');
-            } else {
-              switchRole('patient');
-              setSuccessMsg('Conectado como Paciente!');
-            }
-            setTimeout(() => onClose(), 800);
+        if (mode === 'register_psychologist') {
+          initializeNewPsychologistAccount({
+            fullName: fullName || 'Psicólogo(a)',
+            email,
+            crp: crpNumber || '06/000000',
+            crpState,
+            approach
+          });
+          setSuccessMsg(`Bem-vindo(a), ${fullName}! Conta criada com sucesso.`);
+          setTimeout(() => onClose(), 800);
+        } else if (mode === 'login') {
+          if (email.includes('ana') || email.includes('psi') || !email.includes('paciente')) {
+            switchRole('psychologist');
+            setSuccessMsg('Conectado como Psicóloga!');
           } else {
-            setSuccessMsg('Conta criada com sucesso no ambiente local!');
-            setTimeout(() => onClose(), 1000);
+            switchRole('patient');
+            setSuccessMsg('Conectado como Paciente!');
           }
-        }, 600);
+          setTimeout(() => onClose(), 800);
+        } else {
+          setSuccessMsg('Conta criada com sucesso!');
+          setTimeout(() => onClose(), 800);
+        }
       }
     } catch (err: any) {
       setErrorMsg(err.message || 'Ocorreu um erro ao processar sua autenticação.');

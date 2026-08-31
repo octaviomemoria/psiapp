@@ -92,10 +92,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab, onS
               <span>Painel Profissional do Psicólogo</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
-              Olá, {currentPsychologist.profile?.full_name || 'Dra. Ana Martins'}
+              Olá, {currentPsychologist.profile?.display_name || currentPsychologist.profile?.full_name || 'Dr(a). Psicólogo(a)'}
             </h1>
             <p className="text-teal-100 text-sm leading-relaxed">
-              CRP {currentPsychologist.crp_number}/{currentPsychologist.crp_state} • {activePatients.length} pacientes ativos sob seu acompanhamento clínico.
+              CRP {currentPsychologist.crp_number}/{currentPsychologist.crp_state} • {activePatients.length} paciente(s) ativo(s) sob seu acompanhamento clínico.
             </p>
           </div>
 
@@ -135,6 +135,114 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab, onS
           </div>
         </div>
       </div>
+
+      {/* Guia de Onboarding para Novo Psicólogo (quando sem pacientes cadastrados) */}
+      {patients.length === 0 && (
+        <Card className="border-2 border-dashed border-teal-300 bg-gradient-to-br from-teal-50/70 via-white to-emerald-50/40 shadow-sm rounded-3xl overflow-hidden animate-fade-in">
+          <CardContent className="p-6 sm:p-8 space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-teal-100 pb-5">
+              <div className="space-y-1">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-teal-100 text-teal-800 text-xs font-semibold">
+                  <Sparkles className="w-3.5 h-3.5 text-teal-600" />
+                  Primeiros Passos no seu Consultório
+                </div>
+                <h3 className="text-xl font-bold text-slate-900">
+                  Bem-vindo(a) ao PsiApp! Vamos configurar seus atendimentos.
+                </h3>
+                <p className="text-xs text-slate-600">
+                  Siga os passos abaixo para convidar seus pacientes, criar prontuários e utilizar ferramentas clínicas com sigilo ético total.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-xs hover:border-teal-400 transition-all flex flex-col justify-between space-y-3">
+                <div className="space-y-2">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-sm">
+                    1
+                  </div>
+                  <h4 className="text-sm font-bold text-slate-800">Convidar Paciente</h4>
+                  <p className="text-xs text-slate-500 leading-relaxed">
+                    Gere um link seguro para enviar via WhatsApp para o seu paciente acessar o app.
+                  </p>
+                </div>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => setIsInviteModalOpen(true)}
+                  className="w-full text-xs font-semibold"
+                >
+                  <UserPlus className="w-3.5 h-3.5 mr-1" />
+                  Gerar Convite
+                </Button>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-xs hover:border-teal-400 transition-all flex flex-col justify-between space-y-3">
+                <div className="space-y-2">
+                  <div className="w-9 h-9 rounded-xl bg-teal-100 text-teal-700 flex items-center justify-center font-bold text-sm">
+                    2
+                  </div>
+                  <h4 className="text-sm font-bold text-slate-800">Cadastrar Paciente</h4>
+                  <p className="text-xs text-slate-500 leading-relaxed">
+                    Cadastre manualmente os dados de prontuário e contato de emergência.
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onNavigateTab('pacientes')}
+                  className="w-full text-xs font-semibold border-teal-200 text-teal-800 hover:bg-teal-50"
+                >
+                  <Users className="w-3.5 h-3.5 mr-1" />
+                  Ir para Pacientes
+                </Button>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-xs hover:border-teal-400 transition-all flex flex-col justify-between space-y-3">
+                <div className="space-y-2">
+                  <div className="w-9 h-9 rounded-xl bg-sky-100 text-sky-700 flex items-center justify-center font-bold text-sm">
+                    3
+                  </div>
+                  <h4 className="text-sm font-bold text-slate-800">Agendar Sessão</h4>
+                  <p className="text-xs text-slate-500 leading-relaxed">
+                    Defina horários na agenda clínica e configure a modalidade de atendimento.
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onNavigateTab('agenda')}
+                  className="w-full text-xs font-semibold border-sky-200 text-sky-800 hover:bg-sky-50"
+                >
+                  <Calendar className="w-3.5 h-3.5 mr-1" />
+                  Ver Agenda
+                </Button>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-xs hover:border-teal-400 transition-all flex flex-col justify-between space-y-3">
+                <div className="space-y-2">
+                  <div className="w-9 h-9 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-sm">
+                    4
+                  </div>
+                  <h4 className="text-sm font-bold text-slate-800">Biblioteca TCC/ACT</h4>
+                  <p className="text-xs text-slate-500 leading-relaxed">
+                    Explore exercícios de RPD, desfusão cognitiva e escalas PHQ-9/GAD-7.
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onNavigateTab('biblioteca')}
+                  className="w-full text-xs font-semibold border-indigo-200 text-indigo-800 hover:bg-indigo-50"
+                >
+                  <BookOpen className="w-3.5 h-3.5 mr-1" />
+                  Abrir Biblioteca
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Grid de KPIs / Indicadores Chave */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">

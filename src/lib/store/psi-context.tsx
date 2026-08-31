@@ -131,6 +131,13 @@ interface PsiContextType {
   // Utilidades
   resetToDemoData: () => void;
   loadLiveDataFromSupabase: () => Promise<void>;
+  initializeNewPsychologistAccount: (params: {
+    fullName: string;
+    email: string;
+    crp: string;
+    crpState: string;
+    approach: string;
+  }) => void;
 }
 
 const PsiContext = createContext<PsiContextType | undefined>(undefined);
@@ -174,43 +181,101 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const user = sessionData?.session?.user;
       if (!user) return;
 
-      const profile = await SupabaseService.getCurrentUserProfile(user.id);
-      if (profile) {
+      setAuthUser(user);
+      setActiveDataSource('supabase_live');
+
+      const provisioned = await SupabaseService.ensureProfileAndPsychologist(user);
+      if (provisioned) {
+        const { profile, psychologist } = provisioned;
         setAuthProfile(profile);
         setCurrentRole(profile.role as UserRole);
 
-        if (profile.role === 'psychologist') {
-          const psychData = await SupabaseService.getPsychologistByProfileId(profile.id);
-          if (psychData) {
-            setCurrentPsychologist(psychData);
-          }
+        if (profile.role === 'psychologist' && psychologist) {
+          setCurrentPsychologist(psychologist);
 
           // Carregar pacientes reais do psicólogo
-          const livePatients = await SupabaseService.getPatients(psychData?.id || profile.id);
+          const livePatients = await SupabaseService.getPatients(psychologist.id);
           if (livePatients && livePatients.length > 0) {
             setPatients(livePatients);
             setCurrentPatientId(livePatients[0].id);
           } else {
             setPatients([]);
+            setCurrentPatientId('');
           }
 
           // Carregar agendamentos e sessões reais
-          const liveAppointments = await SupabaseService.getAppointments(psychData?.id);
-          setAppointments(liveAppointments);
+          const liveAppointments = await SupabaseService.getAppointments(psychologist.id);
+          setAppointments(liveAppointments || []);
 
-          const liveSessions = await SupabaseService.getSessions(psychData?.id);
-          setSessions(liveSessions);
+          const liveSessions = await SupabaseService.getSessions(psychologist.id);
+          setSessions(liveSessions || []);
 
           const liveGoals = await SupabaseService.getGoals();
-          setGoals(liveGoals);
+          setGoals(liveGoals || []);
 
-          const liveInvites = await SupabaseService.getPatientInvites(psychData?.id || profile.id);
-          setPatientInvites(liveInvites);
+          const liveInvites = await SupabaseService.getPatientInvites(psychologist.id);
+          setPatientInvites(liveInvites || []);
         }
       }
     } catch (err) {
       console.warn('Erro ao carregar dados do Supabase:', err);
     }
+  }, []);
+
+  const initializeNewPsychologistAccount = useCallback((params: {
+    fullName: string;
+    email: string;
+    crp: string;
+    crpState: string;
+    approach: string;
+  }) => {
+    const newProfile: UserProfile = {
+      id: `prof-${Date.now()}`,
+      user_id: `user-${Date.now()}`,
+      full_name: params.fullName,
+      display_name: params.fullName,
+      email: params.email,
+      role: 'psychologist',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+
+    const newPsychologist: Psychologist = {
+      id: `psych-${Date.now()}`,
+      profile_id: newProfile.id,
+      crp_number: params.crp || '06/000000',
+      crp_state: params.crpState || 'SP',
+      approach: params.approach,
+      specialties: ['Psicoterapia Clínica', 'TCC / ACT'],
+      bio: 'Atendimento clínico com sigilo profissional.',
+      session_default_price: 180,
+      session_default_duration_minutes: 50,
+      profile: newProfile
+    };
+
+    setAuthProfile(newProfile);
+    setCurrentPsychologist(newPsychologist);
+    setCurrentRole('psychologist');
+    setActiveDataSource('supabase_live');
+    setPatients([]);
+    setAppointments([]);
+    setSessions([]);
+    setGoals([]);
+    setPatientInvites([]);
+    setCurrentPatientId('');
+
+    setNotifications(prev => [
+      {
+        id: `notif-${Date.now()}`,
+        recipient_role: 'psychologist',
+        title: `Bem-vindo(a) ao PsiApp, ${params.fullName}!`,
+        message: 'Seu consultório está pronto. Você já pode convidar seus primeiros pacientes ou cadastrá-los.',
+        type: 'feedback_received',
+        read: false,
+        created_at: new Date().toISOString()
+      },
+      ...prev
+    ]);
   }, []);
 
   // Monitorar Autenticação do Supabase
@@ -927,6 +992,7 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         getCurrentUserNotifications,
         resetToDemoData,
         loadLiveDataFromSupabase,
+        initializeNewPsychologistAccount,
       }}
     >
       {children}

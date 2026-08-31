@@ -84,7 +84,7 @@ export const Header: React.FC = () => {
                 title="Visualização da Psicóloga"
               >
                 <UserCheck className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Psicóloga:</span> {authProfile?.display_name || currentPsychologist.profile?.display_name || 'Dra. Ana'}
+                <span className="hidden sm:inline">Psicóloga:</span> {authProfile?.display_name || authProfile?.full_name || currentPsychologist.profile?.display_name || currentPsychologist.profile?.full_name || 'Dr(a). Psicólogo(a)'}
               </button>
 
               <div className="h-4 w-px bg-slate-200 mx-1" />
@@ -101,7 +101,7 @@ export const Header: React.FC = () => {
                   title="Visualização do Paciente"
                 >
                   <Users className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Paciente:</span> {currentPatient?.social_name || currentPatient?.full_name?.split(' ')[0] || 'Paciente'}
+                  <span className="hidden sm:inline">Paciente:</span> {currentPatient?.social_name || currentPatient?.full_name?.split(' ')[0] || (patients.length === 0 ? 'Sem pacientes' : 'Paciente')}
                   <ChevronDown className="w-3 h-3 text-slate-400" />
                 </button>
 
@@ -137,21 +137,23 @@ export const Header: React.FC = () => {
             <NotificationDropdown />
 
             {/* Usuário Logado vs Botão Entrar */}
-            {isLiveProduction && authUser ? (
+            {authProfile || (isLiveProduction && authUser) ? (
               <div className="relative group">
                 <button
                   type="button"
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-semibold hover:bg-emerald-100 transition-colors"
                 >
                   <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                  <span className="max-w-[120px] truncate">{authProfile?.full_name || authUser.email}</span>
+                  <span className="max-w-[120px] truncate">{authProfile?.display_name || authProfile?.full_name || authUser?.email}</span>
                   <ChevronDown className="w-3 h-3 text-emerald-600" />
                 </button>
-                <div className="absolute right-0 mt-1 w-60 bg-white rounded-xl shadow-dropdown border border-slate-100 py-2 hidden group-hover:block z-50">
+                <div className="absolute right-0 mt-1 w-64 bg-white rounded-xl shadow-dropdown border border-slate-100 py-2 hidden group-hover:block z-50">
                   <div className="px-4 py-2 border-b border-slate-100">
-                    <p className="text-xs font-bold text-slate-800 truncate">{authProfile?.full_name || authUser.email}</p>
-                    <p className="text-[11px] text-slate-500 truncate">{authUser.email}</p>
-                    <Badge variant="success" size="sm" className="mt-1">Conta Conectada ao Supabase</Badge>
+                    <p className="text-xs font-bold text-slate-800 truncate">{authProfile?.display_name || authProfile?.full_name || 'Consultório Ativo'}</p>
+                    <p className="text-[11px] text-slate-500 truncate">{authProfile?.email || authUser?.email}</p>
+                    <Badge variant="success" size="sm" className="mt-1">
+                      {isLiveProduction ? 'Conectado ao Supabase' : 'Consultório Criado'}
+                    </Badge>
                   </div>
                   <button
                     type="button"
