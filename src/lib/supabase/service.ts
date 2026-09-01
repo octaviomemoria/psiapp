@@ -150,14 +150,15 @@ export const SupabaseService = {
   // ==========================================
   // PACIENTES
   // ==========================================
-  async getPatients(psychologistId: string): Promise<Patient[]> {
+  async getPatients(psychologistId?: string): Promise<Patient[]> {
     if (!isSupabaseConfigured || !supabase) return [];
     try {
-      const { data, error } = await supabase
-        .from('patients')
-        .select('*')
-        .order('full_name', { ascending: true });
+      let query = supabase.from('patients').select('*').order('full_name', { ascending: true });
+      if (psychologistId) {
+        query = query.eq('psychologist_id', psychologistId);
+      }
 
+      const { data, error } = await query;
       if (error) {
         console.warn('Erro ao buscar pacientes:', error.message);
         return [];

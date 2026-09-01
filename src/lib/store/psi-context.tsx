@@ -274,23 +274,33 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (livePatients && livePatients.length > 0) {
             setPatients(livePatients);
             setCurrentPatientId(livePatients[0].id);
+
+            // Carregar agendamentos e sessões reais
+            const liveAppointments = await SupabaseService.getAppointments(psychologist.id);
+            setAppointments(liveAppointments || []);
+
+            const liveSessions = await SupabaseService.getSessions(psychologist.id);
+            setSessions(liveSessions || []);
+
+            const liveGoals = await SupabaseService.getGoals();
+            setGoals(liveGoals || []);
+
+            const liveInvites = await SupabaseService.getPatientInvites(psychologist.id);
+            setPatientInvites(liveInvites || []);
           } else {
             setPatients([]);
             setCurrentPatientId('');
+            setAppointments([]);
+            setSessions([]);
+            setGoals([]);
+            setAssignedExercises([]);
+            setDiaryEntries([]);
+            setMoodLogs([]);
+            setPsychometricResults([]);
+            setCognitiveDiagrams([]);
+            setVoiceAnchors([]);
+            setPatientInvites([]);
           }
-
-          // Carregar agendamentos e sessões reais
-          const liveAppointments = await SupabaseService.getAppointments(psychologist.id);
-          setAppointments(liveAppointments || []);
-
-          const liveSessions = await SupabaseService.getSessions(psychologist.id);
-          setSessions(liveSessions || []);
-
-          const liveGoals = await SupabaseService.getGoals();
-          setGoals(liveGoals || []);
-
-          const liveInvites = await SupabaseService.getPatientInvites(psychologist.id);
-          setPatientInvites(liveInvites || []);
         }
       }
     } catch (err) {
@@ -342,6 +352,12 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setAppointments([]);
     setSessions([]);
     setGoals([]);
+    setAssignedExercises([]);
+    setDiaryEntries([]);
+    setMoodLogs([]);
+    setPsychometricResults([]);
+    setCognitiveDiagrams([]);
+    setVoiceAnchors([]);
     setPatientInvites([]);
     setCurrentPatientId('');
 
