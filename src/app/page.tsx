@@ -24,6 +24,21 @@ import { DiaryView } from '@/components/patient/DiaryView';
 import { EvolutionView } from '@/components/patient/EvolutionView';
 import { PatientProfileView } from '@/components/patient/PatientProfileView';
 
+// Clinic Manager Views (Dono da Clínica)
+import { ManagerNav } from '@/components/manager/ManagerNav';
+import { ManagerDashboardView } from '@/components/manager/ManagerDashboardView';
+import { ManagerPsychologistsView } from '@/components/manager/ManagerPsychologistsView';
+import { ManagerPatientsView } from '@/components/manager/ManagerPatientsView';
+import { ManagerFinancialView } from '@/components/manager/ManagerFinancialView';
+import { ManagerRoomsView } from '@/components/manager/ManagerRoomsView';
+
+// SuperAdmin SaaS Views (Dono do Sistema)
+import { SuperAdminNav } from '@/components/superadmin/SuperAdminNav';
+import { SuperAdminDashboardView } from '@/components/superadmin/SuperAdminDashboardView';
+import { SuperAdminTenantsView } from '@/components/superadmin/SuperAdminTenantsView';
+import { SuperAdminPlansView } from '@/components/superadmin/SuperAdminPlansView';
+import { SuperAdminAuditView } from '@/components/superadmin/SuperAdminAuditView';
+
 export default function Home() {
   const { currentRole, currentPatient, switchRole, acceptPatientInvite } = usePsi();
 
@@ -33,6 +48,12 @@ export default function Home() {
 
   // Abas do Paciente
   const [patientTab, setPatientTab] = useState<string>('inicio');
+
+  // Abas do Gerente (Clínica)
+  const [managerTab, setManagerTab] = useState<string>('dashboard');
+
+  // Abas do SuperAdmin (SaaS)
+  const [superAdminTab, setSuperAdminTab] = useState<string>('dashboard');
 
   // Detectar convite via link de URL (?invite=PSI-...)
   useEffect(() => {
@@ -60,8 +81,8 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex flex-col selection:bg-teal-100 selection:text-teal-900 pb-16 sm:pb-8">
-      {/* Banner de Acolhimento e Suporte a Crises */}
-      <CrisisBanner />
+      {/* Banner de Acolhimento e Suporte a Crises (Exibido para pacientes e terapeutas) */}
+      {(currentRole === 'patient' || currentRole === 'psychologist') && <CrisisBanner />}
 
       {/* Header Principal com Seletor de Perfil / Demonstração */}
       <Header />
@@ -84,6 +105,22 @@ export default function Home() {
         <PatientDesktopNav
           activeTab={patientTab}
           onSelectTab={tab => setPatientTab(tab)}
+        />
+      )}
+
+      {/* Navegação do Gerente da Clínica */}
+      {currentRole === 'manager' && (
+        <ManagerNav
+          activeTab={managerTab}
+          onSelectTab={tab => setManagerTab(tab)}
+        />
+      )}
+
+      {/* Navegação do SuperAdmin SaaS */}
+      {currentRole === 'superadmin' && (
+        <SuperAdminNav
+          activeTab={superAdminTab}
+          onSelectTab={tab => setSuperAdminTab(tab)}
         />
       )}
 
@@ -150,6 +187,42 @@ export default function Home() {
             {patientTab === 'evolucao' && <EvolutionView />}
 
             {patientTab === 'perfil' && <PatientProfileView />}
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* 3. VISÃO DO GERENTE (DONO DA CLÍNICA) */}
+        {/* ========================================================================= */}
+        {currentRole === 'manager' && (
+          <div>
+            {managerTab === 'dashboard' && (
+              <ManagerDashboardView onNavigateTab={tab => setManagerTab(tab)} />
+            )}
+
+            {managerTab === 'equipe' && <ManagerPsychologistsView />}
+
+            {managerTab === 'pacientes' && <ManagerPatientsView />}
+
+            {managerTab === 'financeiro' && <ManagerFinancialView />}
+
+            {managerTab === 'salas' && <ManagerRoomsView />}
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* 4. VISÃO DO SUPERADMIN (DONO DA PLATAFORMA SAAS) */}
+        {/* ========================================================================= */}
+        {currentRole === 'superadmin' && (
+          <div>
+            {superAdminTab === 'dashboard' && (
+              <SuperAdminDashboardView onNavigateTab={tab => setSuperAdminTab(tab)} />
+            )}
+
+            {superAdminTab === 'clinicas' && <SuperAdminTenantsView />}
+
+            {superAdminTab === 'planos' && <SuperAdminPlansView />}
+
+            {superAdminTab === 'auditoria' && <SuperAdminAuditView />}
           </div>
         )}
       </main>

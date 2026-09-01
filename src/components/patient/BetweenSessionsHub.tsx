@@ -35,9 +35,11 @@ import { SensoryGroundingModal } from './tools/SensoryGroundingModal';
 import { TippEmergencyModal } from './tools/TippEmergencyModal';
 import { CopingCardsModal } from './tools/CopingCardsModal';
 import { SleepDiaryModal } from './tools/SleepDiaryModal';
+import { SafetyPlanModal } from '@/components/tools/SafetyPlanModal';
+import { AudioPlayerModal } from '@/components/tools/AudioPlayerModal';
 import { PsychometricScalesModal } from '@/components/common/PsychometricScalesModal';
 import { formatDate, formatRelativeDate } from '@/lib/utils';
-import { Volume2, Play, Brain } from 'lucide-react';
+import { Volume2, Play, Brain, ShieldAlert } from 'lucide-react';
 
 interface BetweenSessionsHubProps {
   onNavigateTab: (tab: string) => void;
@@ -65,6 +67,8 @@ export const BetweenSessionsHub: React.FC<BetweenSessionsHubProps> = ({ onNaviga
   const [isTippModalOpen, setIsTippModalOpen] = useState(false);
   const [isCopingCardsOpen, setIsCopingCardsOpen] = useState(false);
   const [isSleepModalOpen, setIsSleepModalOpen] = useState(false);
+  const [isSafetyPlanOpen, setIsSafetyPlanOpen] = useState(false);
+  const [isAudioPlayerOpen, setIsAudioPlayerOpen] = useState(false);
   const [isScalesModalOpen, setIsScalesModalOpen] = useState(false);
   const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
 
@@ -135,7 +139,7 @@ export const BetweenSessionsHub: React.FC<BetweenSessionsHubProps> = ({ onNaviga
         </CardContent>
       </Card>
 
-      {/* 2. CAIXA DE FERRAMENTAS RÁPIDAS DE BOLSO */}
+      {/* 2. CAIXA DE FERRAMENTAS RÁPIDAS DE BOLSO (6 FERRAMENTAS) */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -147,19 +151,19 @@ export const BetweenSessionsHub: React.FC<BetweenSessionsHubProps> = ({ onNaviga
           <span className="text-xs text-slate-400">Práticas rápidas e apoio para momentos difíceis</span>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           {/* Ancoragem 5-4-3-2-1 */}
           <button
             type="button"
             onClick={() => setIsGroundingModalOpen(true)}
-            className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-xs hover:shadow-md hover:border-teal-300 transition-all text-left flex flex-col justify-between group"
+            className="p-3.5 rounded-2xl bg-white border border-slate-200/80 shadow-xs hover:shadow-md hover:border-teal-300 transition-all text-left flex flex-col justify-between group"
           >
-            <div className="w-10 h-10 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-              <Anchor className="w-5 h-5" />
+            <div className="w-9 h-9 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform">
+              <Anchor className="w-4 h-4" />
             </div>
             <div>
-              <h4 className="font-bold text-xs sm:text-sm text-slate-900 leading-tight">Ancoragem 5-4-3-2-1</h4>
-              <p className="text-[11px] text-slate-500 mt-1">Acalmar a mente com os 5 sentidos</p>
+              <h4 className="font-bold text-xs text-slate-900 leading-tight">Ancoragem 5-4-3-2-1</h4>
+              <p className="text-[10px] text-slate-500 mt-0.5">5 sentidos</p>
             </div>
           </button>
 
@@ -167,14 +171,29 @@ export const BetweenSessionsHub: React.FC<BetweenSessionsHubProps> = ({ onNaviga
           <button
             type="button"
             onClick={() => setIsTippModalOpen(true)}
-            className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-xs hover:shadow-md hover:border-cyan-300 transition-all text-left flex flex-col justify-between group"
+            className="p-3.5 rounded-2xl bg-white border border-slate-200/80 shadow-xs hover:shadow-md hover:border-cyan-300 transition-all text-left flex flex-col justify-between group"
           >
-            <div className="w-10 h-10 rounded-xl bg-cyan-50 text-cyan-700 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-              <ThermometerSnowflake className="w-5 h-5" />
+            <div className="w-9 h-9 rounded-xl bg-cyan-50 text-cyan-700 flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform">
+              <ThermometerSnowflake className="w-4 h-4" />
             </div>
             <div>
-              <h4 className="font-bold text-xs sm:text-sm text-slate-900 leading-tight">Crise TIPP & STOP</h4>
-              <p className="text-[11px] text-slate-500 mt-1">Regulação física rápida DBT</p>
+              <h4 className="font-bold text-xs text-slate-900 leading-tight">Crise TIPP & STOP</h4>
+              <p className="text-[10px] text-slate-500 mt-0.5">Regulação DBT</p>
+            </div>
+          </button>
+
+          {/* Áudios Guiados */}
+          <button
+            type="button"
+            onClick={() => setIsAudioPlayerOpen(true)}
+            className="p-3.5 rounded-2xl bg-white border border-slate-200/80 shadow-xs hover:shadow-md hover:border-indigo-300 transition-all text-left flex flex-col justify-between group"
+          >
+            <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-700 flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform">
+              <Headphones className="w-4 h-4" />
+            </div>
+            <div>
+              <h4 className="font-bold text-xs text-slate-900 leading-tight">Áudios Guiados</h4>
+              <p className="text-[10px] text-slate-500 mt-0.5">Mindfulness & 4-7-8</p>
             </div>
           </button>
 
@@ -182,14 +201,14 @@ export const BetweenSessionsHub: React.FC<BetweenSessionsHubProps> = ({ onNaviga
           <button
             type="button"
             onClick={() => setIsCopingCardsOpen(true)}
-            className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-xs hover:shadow-md hover:border-sky-300 transition-all text-left flex flex-col justify-between group"
+            className="p-3.5 rounded-2xl bg-white border border-slate-200/80 shadow-xs hover:shadow-md hover:border-sky-300 transition-all text-left flex flex-col justify-between group"
           >
-            <div className="w-10 h-10 rounded-xl bg-sky-50 text-sky-700 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-              <Bookmark className="w-5 h-5" />
+            <div className="w-9 h-9 rounded-xl bg-sky-50 text-sky-700 flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform">
+              <Bookmark className="w-4 h-4" />
             </div>
             <div>
-              <h4 className="font-bold text-xs sm:text-sm text-slate-900 leading-tight">Coping Cards</h4>
-              <p className="text-[11px] text-slate-500 mt-1">Meus lembretes e frases-âncora</p>
+              <h4 className="font-bold text-xs text-slate-900 leading-tight">Coping Cards</h4>
+              <p className="text-[10px] text-slate-500 mt-0.5">Frases-âncora</p>
             </div>
           </button>
 
@@ -197,14 +216,29 @@ export const BetweenSessionsHub: React.FC<BetweenSessionsHubProps> = ({ onNaviga
           <button
             type="button"
             onClick={() => setIsSleepModalOpen(true)}
-            className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-xs hover:shadow-md hover:border-indigo-300 transition-all text-left flex flex-col justify-between group"
+            className="p-3.5 rounded-2xl bg-white border border-slate-200/80 shadow-xs hover:shadow-md hover:border-purple-300 transition-all text-left flex flex-col justify-between group"
           >
-            <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-700 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-              <Moon className="w-5 h-5" />
+            <div className="w-9 h-9 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform">
+              <Moon className="w-4 h-4" />
             </div>
             <div>
-              <h4 className="font-bold text-xs sm:text-sm text-slate-900 leading-tight">Diário do Sono</h4>
-              <p className="text-[11px] text-slate-500 mt-1">Registro matinal de descanso</p>
+              <h4 className="font-bold text-xs text-slate-900 leading-tight">Diário do Sono</h4>
+              <p className="text-[10px] text-slate-500 mt-0.5">Registro matinal</p>
+            </div>
+          </button>
+
+          {/* Plano de Segurança Stanley-Brown */}
+          <button
+            type="button"
+            onClick={() => setIsSafetyPlanOpen(true)}
+            className="p-3.5 rounded-2xl bg-rose-50/70 border border-rose-200/90 shadow-xs hover:shadow-md hover:border-rose-300 transition-all text-left flex flex-col justify-between group"
+          >
+            <div className="w-9 h-9 rounded-xl bg-rose-100 text-rose-700 flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform">
+              <ShieldAlert className="w-4 h-4 text-rose-600" />
+            </div>
+            <div>
+              <h4 className="font-bold text-xs text-rose-950 leading-tight">Plano de Segurança</h4>
+              <p className="text-[10px] text-rose-700 mt-0.5">Prevenção de crise</p>
             </div>
           </button>
         </div>
@@ -538,6 +572,16 @@ export const BetweenSessionsHub: React.FC<BetweenSessionsHubProps> = ({ onNaviga
       <SleepDiaryModal
         isOpen={isSleepModalOpen}
         onClose={() => setIsSleepModalOpen(false)}
+      />
+
+      <SafetyPlanModal
+        isOpen={isSafetyPlanOpen}
+        onClose={() => setIsSafetyPlanOpen(false)}
+      />
+
+      <AudioPlayerModal
+        isOpen={isAudioPlayerOpen}
+        onClose={() => setIsAudioPlayerOpen(false)}
       />
 
       <PsychometricScalesModal

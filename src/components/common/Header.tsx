@@ -14,13 +14,24 @@ import {
   KeyRound,
   LogOut,
   Database,
-  User
+  User,
+  Building2,
+  Crown,
+  Fingerprint,
+  FileText,
+  Globe,
+  BellRing,
+  Lock
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Modal } from '@/components/ui/Modal';
 import { NotificationDropdown } from './NotificationDropdown';
 import { AuthModal } from '@/components/auth/AuthModal';
+import { BiometricLockModal } from './BiometricLockModal';
+import { TherapeuticContractModal } from './TherapeuticContractModal';
+import { PublicBookingPage } from '@/components/public/PublicBookingPage';
+import { PushNotificationManager } from './PushNotificationManager';
 
 export const Header: React.FC = () => {
   const {
@@ -41,6 +52,10 @@ export const Header: React.FC = () => {
   const [isLgpdModalOpen, setIsLgpdModalOpen] = useState(false);
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [isBiometricOpen, setIsBiometricOpen] = useState(false);
+  const [isContractOpen, setIsContractOpen] = useState(false);
+  const [isBookingOpen, setIsBookingOpen] = useState(false);
+  const [isPushOpen, setIsPushOpen] = useState(false);
 
   return (
     <header className="sticky top-0 z-40 w-full glass-header border-b border-slate-200/70 shadow-sm">
@@ -71,29 +86,29 @@ export const Header: React.FC = () => {
 
           {/* Seletor de Perfil / Demo Switcher / Conta */}
           <div className="flex items-center gap-2 sm:gap-3">
-            {/* Seletor de Perfil */}
+            {/* Seletor de Perfil & Papel */}
             <div className="flex items-center bg-slate-100/90 p-1 rounded-xl border border-slate-200">
+              {/* 1. Psicólogo */}
               <button
                 type="button"
                 onClick={() => switchRole('psychologist')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                   currentRole === 'psychologist'
                     ? 'bg-white text-teal-700 shadow-sm'
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
-                title="Visualização da Psicóloga"
+                title="Visualização do Consultório do Psicólogo"
               >
                 <UserCheck className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Psicóloga:</span> {authProfile?.display_name || authProfile?.full_name || currentPsychologist.profile?.display_name || currentPsychologist.profile?.full_name || 'Dr(a). Psicólogo(a)'}
+                <span className="hidden lg:inline">Psicóloga</span>
               </button>
 
-              <div className="h-4 w-px bg-slate-200 mx-1" />
-
+              {/* 2. Paciente */}
               <div className="relative group">
                 <button
                   type="button"
                   onClick={() => switchRole('patient')}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                  className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                     currentRole === 'patient'
                       ? 'bg-white text-teal-700 shadow-sm'
                       : 'text-slate-600 hover:text-slate-900'
@@ -101,7 +116,7 @@ export const Header: React.FC = () => {
                   title="Visualização do Paciente"
                 >
                   <Users className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Paciente:</span> {currentPatient?.social_name || currentPatient?.full_name?.split(' ')[0] || (patients.length === 0 ? 'Sem pacientes' : 'Paciente')}
+                  <span className="hidden lg:inline">Paciente</span>
                   <ChevronDown className="w-3 h-3 text-slate-400" />
                 </button>
 
@@ -131,6 +146,36 @@ export const Header: React.FC = () => {
                   </div>
                 )}
               </div>
+
+              {/* 3. Gerente da Clínica */}
+              <button
+                type="button"
+                onClick={() => switchRole('manager')}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                  currentRole === 'manager'
+                    ? 'bg-white text-indigo-700 shadow-sm font-bold'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+                title="Painel do Gerente (Dono da Clínica)"
+              >
+                <Building2 className="w-3.5 h-3.5" />
+                <span className="hidden lg:inline">Gerente</span>
+              </button>
+
+              {/* 4. SuperAdmin */}
+              <button
+                type="button"
+                onClick={() => switchRole('superadmin')}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                  currentRole === 'superadmin'
+                    ? 'bg-white text-amber-800 shadow-sm font-bold'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+                title="Painel do SuperAdmin SaaS (Multi-Tenant)"
+              >
+                <Crown className="w-3.5 h-3.5 text-amber-500" />
+                <span className="hidden lg:inline">SuperAdmin</span>
+              </button>
             </div>
 
             {/* Sino de Notificações */}
@@ -190,8 +235,50 @@ export const Header: React.FC = () => {
             <Button
               variant="outline"
               size="sm"
+              onClick={() => setIsBookingOpen(true)}
+              className="hidden sm:flex items-center text-xs text-teal-700 border-teal-200 hover:bg-teal-50"
+              title="Página Pública de Agendamento Online"
+            >
+              <Globe className="w-3.5 h-3.5 mr-1 text-teal-600" />
+              Bio Link
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsContractOpen(true)}
+              className="hidden md:flex items-center text-xs text-indigo-700 border-indigo-200 hover:bg-indigo-50"
+              title="Termo de Consentimento & Contrato Terapêutico"
+            >
+              <FileText className="w-3.5 h-3.5 mr-1" />
+              Contrato
+            </Button>
+
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setIsBiometricOpen(true)}
+              className="text-slate-600 hover:text-indigo-600"
+              title="Bloqueio por PIN / Biometria de Privacidade"
+            >
+              <Fingerprint className="w-4 h-4 text-indigo-600" />
+            </Button>
+
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setIsPushOpen(true)}
+              className="text-slate-600 hover:text-amber-600"
+              title="Configurar Notificações Push & Lembretes"
+            >
+              <BellRing className="w-4 h-4 text-amber-500" />
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => setIsLgpdModalOpen(true)}
-              className="hidden lg:flex items-center text-xs text-slate-600 border-slate-200"
+              className="hidden xl:flex items-center text-xs text-slate-600 border-slate-200"
               title="Privacidade e Segurança LGPD/CFP"
             >
               <ShieldCheck className="w-3.5 h-3.5 text-teal-600 mr-1" />
@@ -282,6 +369,32 @@ export const Header: React.FC = () => {
           </div>
         </div>
       </Modal>
+
+      {/* Modal de Bloqueio por PIN / Biometria */}
+      <BiometricLockModal
+        isOpen={isBiometricOpen}
+        onClose={() => setIsBiometricOpen(false)}
+      />
+
+      {/* Modal de Contrato Terapêutico Digital */}
+      <TherapeuticContractModal
+        isOpen={isContractOpen}
+        onClose={() => setIsContractOpen(false)}
+        patientName={currentPatient?.full_name || 'Mariana Costa'}
+        psychologistName={`${currentPsychologist.profile?.full_name || 'Dra. Ana Martins'} (CRP ${currentPsychologist.crp_number}/${currentPsychologist.crp_state})`}
+      />
+
+      {/* Página Pública de Agendamento (Bio Link) */}
+      <PublicBookingPage
+        isOpen={isBookingOpen}
+        onClose={() => setIsBookingOpen(false)}
+      />
+
+      {/* Gerenciador de Notificações Push */}
+      <PushNotificationManager
+        isOpen={isPushOpen}
+        onClose={() => setIsPushOpen(false)}
+      />
     </header>
   );
 };

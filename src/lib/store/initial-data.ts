@@ -15,7 +15,14 @@ import {
   PsychometricResult,
   CognitiveDiagram,
   VoiceAnchor,
-  PatientInvite
+  PatientInvite,
+  UserRole,
+  Clinic,
+  ClinicPsychologist,
+  ClinicRoom,
+  SaaSTenant,
+  SaaSPlan,
+  PlatformAuditLog
 } from '@/types/database';
 
 export const INITIAL_PSYCHOLOGIST_PROFILE: UserProfile = {
@@ -824,6 +831,220 @@ export const INITIAL_EXERCISE_TEMPLATES: ExerciseTemplate[] = [
         required: true,
       }
     ]
+  },
+  {
+    id: 'tpl-seta-descendente',
+    title: 'Técnica da Seta Descendente (Investigação de Crenças)',
+    description: 'Desça das camadas superficiais do pensamento automático até as crenças nucleares sobre si mesmo.',
+    instructions: 'A cada resposta, pergunte a si mesmo: "Se isso for verdade, o que isso significa sobre mim ou sobre o meu futuro?".',
+    category: 'TCC',
+    is_public_library: true,
+    created_at: '2026-02-28T10:00:00Z',
+    schema_fields: [
+      {
+        id: 'pensamento_superficial',
+        type: 'textarea',
+        label: '1. Qual foi o pensamento automático inicial?',
+        placeholder: 'Ex: "Não consegui terminar a tarefa no prazo combinado."',
+        required: true,
+      },
+      {
+        id: 'camada_1',
+        type: 'textarea',
+        label: '2. Se isso for verdade, o que significa para você?',
+        placeholder: 'Ex: "Significa que vão achar que sou desorganizado e incompetente."',
+        required: true,
+      },
+      {
+        id: 'camada_2',
+        type: 'textarea',
+        label: '3. E se acharem isso de você, qual é a pior consequência?',
+        placeholder: 'Ex: "Vou perder a confiança das pessoas e serei rejeitado."',
+        required: true,
+      },
+      {
+        id: 'crenca_nuclear',
+        type: 'radio',
+        label: '4. Qual crença nuclear central parece estar por trás desse medo?',
+        options: [
+          'Desamor / Rejeição ("Eu não sou digno de afeto/respeito")',
+          'Desamparo / Vulnerabilidade ("Eu sou fraco/incapaz de lidar")',
+          'Desvalor / Defectividade ("Eu não tenho valor/sou um fracasso")'
+        ],
+        required: true,
+      },
+      {
+        id: 'crenca_alternativa_saudavel',
+        type: 'textarea',
+        label: '5. Construa uma crença alternativa realista e compassiva:',
+        placeholder: 'Ex: "Cometer um erro ou atrasar um prazo mostra que sou humano, não define meu valor."',
+        required: true,
+      }
+    ]
+  },
+  {
+    id: 'tpl-tribunal-pensamentos',
+    title: 'Tribunal dos Pensamentos: Acusação x Defesa',
+    description: 'Confronte pensamentos autocríticos severos através do método dos dois advogados.',
+    instructions: 'Coloque o pensamento automático no banco dos réus e avalie com imparcialidade.',
+    category: 'TCC',
+    is_public_library: true,
+    created_at: '2026-02-28T10:00:00Z',
+    schema_fields: [
+      {
+        id: 'acusacao_pensamento',
+        type: 'textarea',
+        label: '1. O Pensamento Réu (A Acusação do Crítico Interno):',
+        placeholder: 'Ex: "Você estragou tudo e ninguém mais confia em você."',
+        required: true,
+      },
+      {
+        id: 'provas_acusacao',
+        type: 'textarea',
+        label: '2. Provas da Acusação (Fatos concretos que sustentam isso):',
+        placeholder: 'Apenas fatos verificáveis, sem suposições...',
+        required: true,
+      },
+      {
+        id: 'provas_defesa',
+        type: 'textarea',
+        label: '3. Provas da Defesa (Fatos reais que contestam ou atenuam a acusação):',
+        placeholder: 'Sucessos passados, contexto atenuante, intenção positiva, outras opiniões...',
+        required: true,
+      },
+      {
+        id: 'veredito_juiz',
+        type: 'textarea',
+        label: '4. Veredito do Juiz Neutro e Justo (A conclusão equilibrada):',
+        placeholder: 'Ex: "Houve sim uma falha pontual, mas não houve dolo e já corrigi o que era possível."',
+        required: true,
+      },
+      {
+        id: 'alivio_emocional',
+        type: 'scale_10',
+        label: '5. Grau de alívio e clareza mental após o veredito (0 a 10):',
+        min: 0,
+        max: 10,
+        required: true,
+      }
+    ]
+  },
+  {
+    id: 'tpl-solucao-problemas-dzurilla',
+    title: 'Resolução Prática de Problemas em 5 Etapas',
+    description: 'Protocolo de tomada de decisão estruturada para desarmar sobrecarga e paralisia mental.',
+    instructions: 'Siga as 5 etapas de D\'Zurilla para transformar uma preocupação difusa em passos executáveis.',
+    category: 'TCC',
+    is_public_library: true,
+    created_at: '2026-02-28T10:00:00Z',
+    schema_fields: [
+      {
+        id: 'definicao_problema',
+        type: 'textarea',
+        label: '1. Definição Objetiva do Problema (O que exatamente precisa ser resolvido?):',
+        placeholder: 'Seja específico e focado no que está sob o seu controle...',
+        required: true,
+      },
+      {
+        id: 'brainstorming_opcoes',
+        type: 'textarea',
+        label: '2. Chuva de Ideias / Alternativas (Liste pelo menos 4 opções possíveis, sem censura prévia):',
+        placeholder: 'Opção A, Opção B, Opção C, Opção D...',
+        required: true,
+      },
+      {
+        id: 'pros_contras_escolha',
+        type: 'textarea',
+        label: '3. Análise da Melhor Opção (Qual opção oferece o melhor equilíbrio de prós e contras viáveis?):',
+        required: true,
+      },
+      {
+        id: 'primeiro_passo_imediato',
+        type: 'text',
+        label: '4. Qual é o primeiro passo concreto que você dará hoje/amanhã?',
+        placeholder: 'Ex: Agendar a conversa, redigir o e-mail, ligar para o técnico...',
+        required: true,
+      }
+    ]
+  },
+  {
+    id: 'tpl-matriz-act',
+    title: 'Matriz ACT: Mapa de Aproximação e Esquiva',
+    description: 'Visualização dos 4 quadrantes para direcionar a vida rumo aos valores centrais.',
+    instructions: 'Mapeie o que sua mente sente por dentro versus o que você faz por fora.',
+    category: 'ACT',
+    is_public_library: true,
+    created_at: '2026-02-28T10:00:00Z',
+    schema_fields: [
+      {
+        id: 'quem_importa_valores',
+        type: 'textarea',
+        label: '1. Quadrante Inferior Direito: Quem ou o que é realmente importante para você nesta área da vida?',
+        placeholder: 'Pessoas queridas, valores de presença, integridade, cuidado...',
+        required: true,
+      },
+      {
+        id: 'dor_interna_obstaculos',
+        type: 'textarea',
+        label: '2. Quadrante Inferior Esquerdo: Quais pensamentos difíceis, medos ou sensações surgem para te travar?',
+        placeholder: 'Medo de errar, ansiedade no peito, pensamentos de "não sou bom o bastante"...',
+        required: true,
+      },
+      {
+        id: 'comportamentos_afastamento',
+        type: 'textarea',
+        label: '3. Quadrante Superior Esquerdo: O que você faz por fora para tentar fugir ou anestesiar essa dor (Esquiva)?',
+        placeholder: 'Procrastinar nas redes sociais, isolar-se, adiar decisões, comer no impulso...',
+        required: true,
+      },
+      {
+        id: 'comportamentos_aproximacao',
+        type: 'textarea',
+        label: '4. Quadrante Superior Direito: Que ação comprometida você pode fazer hoje para se aproximar dos seus valores?',
+        placeholder: 'Ação concreta mesmo com a presença do desconforto...',
+        required: true,
+      }
+    ]
+  },
+  {
+    id: 'tpl-tres-bencaos-seligman',
+    title: 'Diário das 3 Bênçãos & Gratidão Ativa (Seligman)',
+    description: 'Protocolo de Psicologia Positiva com atribuição causal para ampliar emoções positivas sustentáveis.',
+    instructions: 'Ao final do dia, registre 3 acontecimentos positivos e reflita sobre o porquê de terem acontecido.',
+    category: 'Psicologia Positiva',
+    is_public_library: true,
+    created_at: '2026-02-28T10:00:00Z',
+    schema_fields: [
+      {
+        id: 'bencao_1',
+        type: 'textarea',
+        label: '1ª Coisa Boa de Hoje & Por que isso aconteceu?',
+        placeholder: 'Ex: Consegui caminhar 30 min no parque. Aconteceu porque organizei meu horário antes...',
+        required: true,
+      },
+      {
+        id: 'bencao_2',
+        type: 'textarea',
+        label: '2ª Coisa Boa de Hoje & Por que isso aconteceu?',
+        placeholder: 'Ex: Uma conversa muito gostosa com um amigo...',
+        required: true,
+      },
+      {
+        id: 'bencao_3',
+        type: 'textarea',
+        label: '3ª Coisa Boa de Hoje & Por que isso aconteceu?',
+        placeholder: 'Ex: Terminei uma tarefa que estava me preocupando...',
+        required: true,
+      },
+      {
+        id: 'impacto_humor',
+        type: 'scale_10',
+        label: 'De 0 a 10, como você avalia seu bem-estar agora após saborear esses momentos?',
+        min: 0,
+        max: 10,
+        required: true,
+      }
+    ]
   }
 ];
 
@@ -1340,4 +1561,350 @@ export const INITIAL_INVITES: PatientInvite[] = [
     created_at: '2026-08-28T10:00:00Z'
   }
 ];
+
+// =============================================================================
+// CONTAS DE TESTE PRÉ-CONFIGURADAS (1-CLICK & PADRÃO)
+// =============================================================================
+
+export interface TestAccount {
+  email: string;
+  password: string;
+  role: UserRole;
+  name: string;
+  description: string;
+  patientId?: string;
+  iconType: 'patient' | 'psychologist' | 'manager' | 'superadmin';
+}
+
+export const INITIAL_TEST_ACCOUNTS: TestAccount[] = [
+  {
+    email: 'paciente@teste.com',
+    password: 'paciente@teste.com',
+    role: 'patient',
+    name: 'Mariana Costa (Paciente Teste)',
+    description: 'Acesso do paciente: diário íntimo, humor, 16 ferramentas de bolso e metas terapêuticas',
+    patientId: 'pat-mariana-costa',
+    iconType: 'patient'
+  },
+  {
+    email: 'psicologo@teste.com',
+    password: 'psicologo@teste.com',
+    role: 'psychologist',
+    name: 'Dra. Ana Martins (Psicóloga Clínica)',
+    description: 'Acesso completo do terapeuta: prontuário 360° em 7 abas, notas de sigilo, agenda e relatórios CFP',
+    iconType: 'psychologist'
+  },
+  {
+    email: 'gerente@teste.com',
+    password: 'gerente@teste.com',
+    role: 'manager',
+    name: 'Carlos Drummond (Gerente da Clínica)',
+    description: 'Gestão da Clínica Mente Saudável: equipe, salas, financeiro e distribuição (Sem acesso a sigilo)',
+    iconType: 'manager'
+  },
+  {
+    email: 'superadmin@teste.com',
+    password: 'superadmin@teste.com',
+    role: 'superadmin',
+    name: 'Octávio Memória (SuperAdmin do SaaS)',
+    description: 'Administração global do SaaS: clínicas parceiras, planos MRR, logs de auditoria e segurança',
+    iconType: 'superadmin'
+  }
+];
+
+// =============================================================================
+// DADOS DA CLÍNICA (MÓDULO DO GERENTE)
+// =============================================================================
+
+export const INITIAL_CLINIC: Clinic = {
+  id: 'clinic-mente-saudavel',
+  name: 'Clínica Mente Saudável',
+  trade_name: 'Mente Saudável Psicologia Integrada',
+  cnpj: '12.345.678/0001-90',
+  address: 'Av. Paulista, 1578 - Conjunto 802, Bela Vista - São Paulo/SP',
+  phone: '(11) 3254-8900',
+  email: 'gerente@teste.com',
+  owner_user_id: 'user-manager-carlos',
+  active: true,
+  created_at: '2025-06-15T08:00:00Z',
+};
+
+export const INITIAL_CLINIC_PSYCHOLOGISTS: ClinicPsychologist[] = [
+  {
+    id: 'cpsi-1',
+    clinic_id: 'clinic-mente-saudavel',
+    full_name: 'Dra. Ana Martins',
+    email: 'psicologo@teste.com',
+    phone: '(11) 98765-4321',
+    crp: '06/123456',
+    crp_state: 'SP',
+    approach: 'TCC & Mindfulness',
+    specialties: ['Ansiedade e Pânico', 'Burnout', 'Adultos'],
+    commission_rate: 70,
+    active_patients_count: 5,
+    status: 'active',
+    schedule_days: ['Seg', 'Ter', 'Qua', 'Qui'],
+    joined_at: '2025-06-20T09:00:00Z'
+  },
+  {
+    id: 'cpsi-2',
+    clinic_id: 'clinic-mente-saudavel',
+    full_name: 'Dr. Lucas Ferreira',
+    email: 'lucas.ferreira@mentesaudavel.com.br',
+    phone: '(11) 97722-3344',
+    crp: '06/987123',
+    crp_state: 'SP',
+    approach: 'DBT & Terapia do Esquema',
+    specialties: ['Regulação Emocional', 'Trauma', 'Adolescentes'],
+    commission_rate: 65,
+    active_patients_count: 8,
+    status: 'active',
+    schedule_days: ['Ter', 'Qua', 'Sex', 'Sáb'],
+    joined_at: '2025-08-10T10:00:00Z'
+  },
+  {
+    id: 'cpsi-3',
+    clinic_id: 'clinic-mente-saudavel',
+    full_name: 'Dra. Beatriz Menezes',
+    email: 'beatriz.menezes@mentesaudavel.com.br',
+    phone: '(11) 96655-4433',
+    crp: '06/654321',
+    crp_state: 'SP',
+    approach: 'Psicanálise Contemporânea & ACT',
+    specialties: ['Luto e Depressão', 'Relacionamentos', 'Adultos e Idosos'],
+    commission_rate: 70,
+    active_patients_count: 6,
+    status: 'active',
+    schedule_days: ['Seg', 'Qua', 'Sex'],
+    joined_at: '2025-11-01T08:30:00Z'
+  },
+  {
+    id: 'cpsi-4',
+    clinic_id: 'clinic-mente-saudavel',
+    full_name: 'Dr. Thiago Vasconcelos',
+    email: 'thiago.v@mentesaudavel.com.br',
+    phone: '(11) 95544-3322',
+    crp: '06/445566',
+    crp_state: 'SP',
+    approach: 'Neuropsicologia & TCC',
+    specialties: ['TDAH e Avaliação Neuropsicológica', 'Reabilitação Cognitiva'],
+    commission_rate: 75,
+    active_patients_count: 4,
+    status: 'on_leave',
+    schedule_days: ['Qui', 'Sex'],
+    joined_at: '2026-01-15T14:00:00Z'
+  }
+];
+
+export const INITIAL_CLINIC_ROOMS: ClinicRoom[] = [
+  {
+    id: 'room-1',
+    clinic_id: 'clinic-mente-saudavel',
+    name: 'Sala 01 - Acolhimento Adulto',
+    room_number: '101',
+    type: 'physical',
+    capacity: 3,
+    description: 'Poltronas ergonômicas, iluminação suave indireta e isolamento acústico duplo.',
+    status: 'occupied',
+    current_session_info: {
+      psychologist_name: 'Dra. Ana Martins',
+      patient_initials: 'M.C.',
+      until: '15:00'
+    }
+  },
+  {
+    id: 'room-2',
+    clinic_id: 'clinic-mente-saudavel',
+    name: 'Sala 02 - Ludoterapia e Infantil',
+    room_number: '102',
+    type: 'physical',
+    capacity: 4,
+    description: 'Mesa de atividades, caixa de areia, brinquedos terapêuticos e piso emborrachado.',
+    status: 'available'
+  },
+  {
+    id: 'room-3',
+    clinic_id: 'clinic-mente-saudavel',
+    name: 'Sala 03 - Casal e Grupo',
+    room_number: '103',
+    type: 'physical',
+    capacity: 8,
+    description: 'Sofás amplos em ferradura para atendimento de casais, famílias e grupos psicoeducativos.',
+    status: 'available'
+  },
+  {
+    id: 'room-4',
+    clinic_id: 'clinic-mente-saudavel',
+    name: 'Sala Virtual VIP - Teleconsulta 01',
+    type: 'virtual',
+    capacity: 2,
+    description: 'Sala de videoconferência HD com link criptografado corporativo integrado.',
+    status: 'available'
+  }
+];
+
+// =============================================================================
+// DADOS DA PLATAFORMA SAAS (MÓDULO DO SUPERADMIN)
+// =============================================================================
+
+export const INITIAL_SAAS_PLANS: SaaSPlan[] = [
+  {
+    id: 'plan-single',
+    code: 'single',
+    name: 'Psicólogo Autônomo',
+    price_monthly: 89.90,
+    max_psychologists: 1,
+    features: [
+      '1 Consultório do Psicólogo',
+      'Pacientes Ilimitados',
+      'Prontuário 360° com 7 Abas',
+      '16 Ferramentas e Exercícios Clínicos',
+      'Emissão de Relatórios CFP & Recibos',
+      'Assistente de IA Ética Supervisionada'
+    ]
+  },
+  {
+    id: 'plan-pro',
+    code: 'clinic_pro',
+    name: 'Clínica Pro',
+    price_monthly: 249.90,
+    max_psychologists: 5,
+    popular: true,
+    features: [
+      'Tudo do Plano Autônomo',
+      'Até 5 Psicólogos na Equipe',
+      'Gestão de Salas Físicas & Virtuais',
+      'Financeiro Consolidado da Clínica & Repasses',
+      'Distribuição Institucional de Pacientes',
+      'Painel do Dono da Clínica com Sigilo Ético'
+    ]
+  },
+  {
+    id: 'plan-enterprise',
+    code: 'clinic_enterprise',
+    name: 'Clínica Enterprise',
+    price_monthly: 590.00,
+    max_psychologists: 30,
+    features: [
+      'Tudo do Plano Pro',
+      'Psicólogos e Salas Ilimitados',
+      'API Aberta & Integração com WhatsApp Próprio',
+      'Domínio Personalizado (Whitelabel)',
+      'Suporte Prioritário 24/7',
+      'Auditoria Avançada de Conformidade LGPD'
+    ]
+  }
+];
+
+export const INITIAL_SAAS_TENANTS: SaaSTenant[] = [
+  {
+    id: 'tenant-1',
+    clinic_name: 'Clínica Mente Saudável',
+    owner_name: 'Carlos Drummond',
+    owner_email: 'gerente@teste.com',
+    plan_code: 'clinic_pro',
+    status: 'active',
+    psychologists_count: 4,
+    max_psychologists: 5,
+    monthly_mrr: 249.90,
+    created_at: '2025-06-15T08:00:00Z',
+    next_billing_date: '2026-09-15'
+  },
+  {
+    id: 'tenant-2',
+    clinic_name: 'Espaço Viver Bem Psicologia',
+    owner_name: 'Dra. Roberta Dias',
+    owner_email: 'roberta@espacoviverbem.com.br',
+    plan_code: 'clinic_pro',
+    status: 'active',
+    psychologists_count: 3,
+    max_psychologists: 5,
+    monthly_mrr: 249.90,
+    created_at: '2025-09-01T10:00:00Z',
+    next_billing_date: '2026-09-01'
+  },
+  {
+    id: 'tenant-3',
+    clinic_name: 'Instituto Paulista de Neurociências',
+    owner_name: 'Dr. Fernando Albuquerque',
+    owner_email: 'contato@institutopaulistaneuro.com.br',
+    plan_code: 'clinic_enterprise',
+    status: 'active',
+    psychologists_count: 14,
+    max_psychologists: 30,
+    monthly_mrr: 590.00,
+    created_at: '2025-11-20T14:00:00Z',
+    next_billing_date: '2026-09-20'
+  },
+  {
+    id: 'tenant-4',
+    clinic_name: 'Consultório Dra. Marina Albuquerque',
+    owner_name: 'Dra. Marina Albuquerque',
+    owner_email: 'marina.psico@gmail.com',
+    plan_code: 'single',
+    status: 'trial',
+    psychologists_count: 1,
+    max_psychologists: 1,
+    monthly_mrr: 89.90,
+    created_at: '2026-08-25T11:00:00Z',
+    next_billing_date: '2026-09-08'
+  },
+  {
+    id: 'tenant-5',
+    clinic_name: 'Centro Integrado de Terapias Cognitivas',
+    owner_name: 'Dr. Marcos Sampaio',
+    owner_email: 'marcos@citcognitivas.com.br',
+    plan_code: 'clinic_pro',
+    status: 'past_due',
+    psychologists_count: 5,
+    max_psychologists: 5,
+    monthly_mrr: 249.90,
+    created_at: '2025-04-10T09:00:00Z',
+    next_billing_date: '2026-08-20'
+  }
+];
+
+export const INITIAL_PLATFORM_LOGS: PlatformAuditLog[] = [
+  {
+    id: 'log-1',
+    timestamp: '2026-08-31T17:45:10Z',
+    user_email: 'psicologo@teste.com',
+    user_role: 'psychologist',
+    action: 'Emissão de Relatório de Evolução CFP (Resolução 06/2019)',
+    target: 'Paciente Mariana Costa',
+    status: 'success',
+    ip_address: '189.120.45.12'
+  },
+  {
+    id: 'log-2',
+    timestamp: '2026-08-31T16:30:22Z',
+    user_email: 'gerente@teste.com',
+    user_role: 'manager',
+    action: 'Visualização de Repasses Financeiros da Clínica',
+    target: 'Clínica Mente Saudável',
+    status: 'success',
+    ip_address: '177.18.90.34'
+  },
+  {
+    id: 'log-3',
+    timestamp: '2026-08-31T15:10:05Z',
+    user_email: 'paciente@teste.com',
+    user_role: 'patient',
+    action: 'Check-in de Humor e Resposta de Ancoragem 5-4-3-2-1',
+    target: 'Área Entre Sessões',
+    status: 'success',
+    ip_address: '186.230.12.88'
+  },
+  {
+    id: 'log-4',
+    timestamp: '2026-08-31T14:00:00Z',
+    user_email: 'superadmin@teste.com',
+    user_role: 'superadmin',
+    action: 'Auditoria Global de Políticas RLS do Supabase',
+    target: 'Multi-Tenant Security Gate',
+    status: 'success',
+    ip_address: '201.86.110.5'
+  }
+];
+
 

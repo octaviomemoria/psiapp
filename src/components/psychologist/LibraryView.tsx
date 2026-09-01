@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { usePsi } from '@/lib/store/psi-context';
+import { ExerciseTemplate } from '@/types/database';
 import {
   BookOpen,
   ClipboardList,
@@ -14,13 +15,16 @@ import {
   File,
   CheckCircle2,
   ExternalLink,
-  Layers
+  Layers,
+  Eye,
+  Sparkles
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Modal } from '@/components/ui/Modal';
 import { ExerciseBuilderModal } from './ExerciseBuilderModal';
+import { ExercisePreviewModal } from './ExercisePreviewModal';
 
 export const LibraryView: React.FC = () => {
   const {
@@ -35,6 +39,7 @@ export const LibraryView: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [isExerciseBuilderOpen, setIsExerciseBuilderOpen] = useState(false);
+  const [previewingTemplate, setPreviewingTemplate] = useState<ExerciseTemplate | null>(null);
 
   // Modal Atribuir para Paciente
   const [assigningTemplateId, setAssigningTemplateId] = useState<string | null>(null);
@@ -202,13 +207,23 @@ export const LibraryView: React.FC = () => {
 
               <div className="pt-4 border-t border-slate-100 flex items-center justify-between gap-2 mt-4">
                 <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPreviewingTemplate(tpl)}
+                  className="w-1/2 text-xs text-slate-700 hover:bg-slate-50 flex items-center justify-center gap-1 font-medium"
+                >
+                  <Eye className="w-3.5 h-3.5 text-teal-600" />
+                  Pré-visualizar
+                </Button>
+
+                <Button
                   variant="primary"
                   size="sm"
                   onClick={() => setAssigningTemplateId(tpl.id)}
-                  className="w-full text-xs font-semibold"
+                  className="w-1/2 text-xs font-bold bg-teal-600 hover:bg-teal-700 flex items-center justify-center gap-1"
                 >
-                  <ClipboardList className="w-3.5 h-3.5 mr-1" />
-                  Atribuir a um Paciente
+                  <ClipboardList className="w-3.5 h-3.5" />
+                  Atribuir
                 </Button>
               </div>
             </Card>
@@ -384,6 +399,16 @@ export const LibraryView: React.FC = () => {
           </div>
         </div>
       </Modal>
+
+      {/* Modal de Pré-visualização de Exercício */}
+      <ExercisePreviewModal
+        template={previewingTemplate}
+        isOpen={Boolean(previewingTemplate)}
+        onClose={() => setPreviewingTemplate(null)}
+        onAssign={tpl => {
+          setAssigningTemplateId(tpl.id);
+        }}
+      />
     </div>
   );
 };

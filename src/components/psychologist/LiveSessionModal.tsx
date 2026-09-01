@@ -27,6 +27,7 @@ import {
   MessageSquare,
   ShieldCheck
 } from 'lucide-react';
+import { AIService } from '@/lib/ai/ai-service';
 
 interface LiveSessionModalProps {
   isOpen: boolean;
@@ -85,6 +86,7 @@ export const LiveSessionModal: React.FC<LiveSessionModalProps> = ({
   const [anchorTitle, setAnchorTitle] = useState('Âncora de Regulação e Desfusão');
   const [anchorTranscript, setAnchorTranscript] = useState('');
   const [isVoiceSaved, setIsVoiceSaved] = useState(false);
+  const [isDiagramSaved, setIsDiagramSaved] = useState(false);
 
   // Ditado de Áudio / Assistente IA
   const [isDictating, setIsDictating] = useState(false);
@@ -156,7 +158,8 @@ export const LiveSessionModal: React.FC<LiveSessionModalProps> = ({
       alternative_thought: alternativeThought,
       outcome_emotion_intensity: outcomeIntensity
     });
-    alert('✅ Diagrama de Conceituação Cognitiva salvo e anexado à sessão!');
+    setIsDiagramSaved(true);
+    setTimeout(() => setIsDiagramSaved(false), 3000);
   };
 
   const handleSaveVoiceAnchor = () => {
@@ -173,26 +176,23 @@ export const LiveSessionModal: React.FC<LiveSessionModalProps> = ({
     setTimeout(() => setIsVoiceSaved(false), 3000);
   };
 
-  const handleGenerateAiSoapDraft = () => {
+  const handleGenerateAiSoapDraft = async () => {
     setIsGeneratingAiDraft(true);
-    setTimeout(() => {
-      setSubjective(
-        `Paciente ${patient.full_name} relatou episódios de ansiedade antecipatória no trabalho durante a semana, com sintomas físicos de taquicardia e pensamentos de incapacidade ("Não vou dar conta").`
-      );
-      setObjective(
-        'Paciente lúcida, orientada, afeto congruente com o relato, boa adesão às técnicas de respiração diafragmática.'
-      );
-      setAssessment(
-        'Padrão de pensamento catastrófico e distorção cognitiva de filtro negativo. Boa resposta à reestruturação cognitiva e desfusão durante a sessão.'
-      );
-      setPlan(
-        'Manter monitoramento de pensamentos automáticos via RPD no aplicativo e praticar ancoragem sensorial 5-4-3-2-1 antes de reuniões críticas.'
-      );
-      setHomework(
-        'Realizar o exercício de RPD (Registro de Pensamentos Disfuncionais) pelo menos 2x na semana.'
-      );
+    try {
+      const clinicalNotes = `Situação trabalhada: ${situation || 'Não especificada'}. Pensamento automático: "${automaticThought || 'Não relatado'}". Emoção predominante: ${emotion} (${emotionIntensity}/10). Reação fisiológica: ${physiologicalReaction}. Comportamento: ${behavior}. Reestruturação/Pensamento alternativo: ${alternativeThought}.`;
+      
+      const soap = await AIService.generateSOAPDraft(clinicalNotes, patient.full_name, currentPsychologist.approach || 'TCC');
+      
+      setSubjective(soap.subjective);
+      setObjective(soap.objective);
+      setAssessment(soap.assessment);
+      setPlan(soap.plan);
+      setHomework('Realizar o exercício de RPD (Registro de Pensamentos Disfuncionais) pelo menos 2x na semana.');
+    } catch (err) {
+      console.error('Erro ao gerar SOAP com IA:', err);
+    } finally {
       setIsGeneratingAiDraft(false);
-    }, 1200);
+    }
   };
 
   const handleFinishSession = () => {
@@ -456,8 +456,16 @@ export const LiveSessionModal: React.FC<LiveSessionModalProps> = ({
                   </h4>
                   <p className="text-xs text-slate-500">Mapeie ao vivo com o paciente a cadeia Situação ➔ Pensamento ➔ Emoção ➔ Comportamento</p>
                 </div>
-                <Button size="sm" onClick={handleSaveCognitiveDiagram} className="text-xs">
-                  <Save className="w-3.5 h-3.5 mr-1" /> Salvar no Prontuário
+                <Button size="sm" onClick={handleSaveCognitiveDiagram} className={`text-xs ${isDiagramSaved ? 'bg-emerald-600 text-white' : ''}`}>
+                  {isDiagramSaved ? (
+                    <>
+                      <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Diagrama Salvo!
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-3.5 h-3.5 mr-1" /> Salvar no Prontuário
+                    </>
+                  )}
                 </Button>
               </div>
 

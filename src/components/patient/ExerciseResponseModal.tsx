@@ -6,7 +6,7 @@ import { AssignedExercise } from '@/types/database';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
-import { CheckCircle2, Send, Sparkles, HelpCircle, Heart } from 'lucide-react';
+import { CheckCircle2, Send, Sparkles, HelpCircle, Heart, Printer, FileText } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 interface ExerciseResponseModalProps {
@@ -261,16 +261,31 @@ export const ExerciseResponseModal: React.FC<ExerciseResponseModalProps> = ({
         )}
 
         {/* Rodapé e Botões */}
-        <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
-          <Button type="button" variant="outline" size="sm" onClick={onClose}>
-            {isAlreadyCompleted ? 'Fechar' : 'Cancelar'}
-          </Button>
-          {!isAlreadyCompleted && (
-            <Button type="submit" variant="primary" size="md" className="font-semibold shadow-sm">
-              <Send className="w-4 h-4 mr-1.5" />
-              Enviar Exercício Concluído
+        <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+          {isAlreadyCompleted ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => window.print()}
+              className="text-xs text-slate-600 border-slate-300 flex items-center gap-1"
+            >
+              <Printer className="w-3.5 h-3.5" />
+              Imprimir / Salvar PDF
             </Button>
-          )}
+          ) : <div />}
+
+          <div className="flex items-center gap-2">
+            <Button type="button" variant="outline" size="sm" onClick={onClose}>
+              {isAlreadyCompleted ? 'Fechar' : 'Cancelar'}
+            </Button>
+            {!isAlreadyCompleted && (
+              <Button type="submit" variant="primary" size="md" className="font-semibold shadow-sm">
+                <Send className="w-4 h-4 mr-1.5" />
+                Enviar Exercício Concluído
+              </Button>
+            )}
+          </div>
         </div>
       </form>
     </Modal>

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import {
   UserProfile,
   Psychologist,
@@ -23,7 +23,13 @@ import {
   PsychometricResult,
   CognitiveDiagram,
   VoiceAnchor,
-  PatientInvite
+  PatientInvite,
+  Clinic,
+  ClinicPsychologist,
+  ClinicRoom,
+  SaaSTenant,
+  SaaSPlan,
+  PlatformAuditLog
 } from '@/types/database';
 import {
   INITIAL_PSYCHOLOGIST,
@@ -41,7 +47,13 @@ import {
   INITIAL_PSYCHOMETRIC_RESULTS,
   INITIAL_COGNITIVE_DIAGRAMS,
   INITIAL_VOICE_ANCHORS,
-  INITIAL_INVITES
+  INITIAL_INVITES,
+  INITIAL_CLINIC,
+  INITIAL_CLINIC_PSYCHOLOGISTS,
+  INITIAL_CLINIC_ROOMS,
+  INITIAL_SAAS_PLANS,
+  INITIAL_SAAS_TENANTS,
+  INITIAL_PLATFORM_LOGS
 } from './initial-data';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
 import { SupabaseService } from '@/lib/supabase/service';
@@ -62,7 +74,7 @@ interface PsiContextType {
   toggleDataSource: (source: 'supabase_live' | 'demo_mode') => void;
   signOut: () => Promise<void>;
 
-  // Coleções de Dados
+  // Coleções de Dados Clínicos
   patients: Patient[];
   appointments: Appointment[];
   sessions: TherapySession[];
@@ -78,6 +90,14 @@ interface PsiContextType {
   cognitiveDiagrams: CognitiveDiagram[];
   voiceAnchors: VoiceAnchor[];
   patientInvites: PatientInvite[];
+
+  // Coleções do Gerente da Clínica & SuperAdmin SaaS
+  clinic: Clinic;
+  clinicPsychologists: ClinicPsychologist[];
+  clinicRooms: ClinicRoom[];
+  saasPlans: SaaSPlan[];
+  saasTenants: SaaSTenant[];
+  platformLogs: PlatformAuditLog[];
 
   // Notificações
   unreadNotificationsCount: number;
@@ -106,6 +126,17 @@ interface PsiContextType {
   addVoiceAnchor: (anchor: Omit<VoiceAnchor, 'id' | 'created_at'>) => void;
   createPatientInvite: (name: string, email: string, phone: string) => PatientInvite;
   acceptPatientInvite: (token: string, password?: string) => boolean;
+
+  // Ações do Gerente da Clínica (Dono da Clínica)
+  addClinicPsychologist: (psychologist: Omit<ClinicPsychologist, 'id' | 'clinic_id' | 'joined_at'>) => void;
+  updateClinicPsychologist: (id: string, updates: Partial<ClinicPsychologist>) => void;
+  reassignPatientPsychologist: (patientId: string, newPsychologistId: string, newPsychologistName: string) => void;
+  updateRoomStatus: (roomId: string, status: 'available' | 'occupied' | 'maintenance', sessionInfo?: any) => void;
+
+  // Ações do SuperAdmin (Dono do SaaS)
+  updateTenantStatus: (tenantId: string, status: 'active' | 'trial' | 'past_due' | 'suspended') => void;
+  updateTenantPlan: (tenantId: string, planCode: 'single' | 'clinic_pro' | 'clinic_enterprise') => void;
+  addTenant: (tenant: Omit<SaaSTenant, 'id' | 'created_at'>) => void;
 
   // Ações do Paciente
   submitExerciseResponse: (assignedExerciseId: string, responses: Record<string, any>, notes?: string) => void;
@@ -171,7 +202,49 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [voiceAnchors, setVoiceAnchors] = useState<VoiceAnchor[]>(INITIAL_VOICE_ANCHORS);
   const [patientInvites, setPatientInvites] = useState<PatientInvite[]>(INITIAL_INVITES);
 
-  const isLiveProduction = activeDataSource === 'supabase_live' && Boolean(authUser);
+  // Estados do Gerente da Clínica e SuperAdmin SaaS
+  const [clinic, setClinic] = useState<Clinic>(INITIAL_CLINIC);
+  const [clinicPsychologists, setClinicPsychologists] = useState<ClinicPsychologist[]>(INITIAL_CLINIC_PSYCHOLOGISTS);
+  const [clinicRooms, setClinicRooms] = useState<ClinicRoom[]>(INITIAL_CLINIC_ROOMS);
+  const [saasPlans, setSaasPlans] = useState<SaaSPlan[]>(INITIAL_SAAS_PLANS);
+  const [saasTenants, setSaasTenants] = useState<SaaSTenant[]>(INITIAL_SAAS_TENANTS);
+  const [platformLogs, setPlatformLogs] = useState<PlatformAuditLog[]>(INITIAL_PLATFORM_LOGS);
+
+  const isLiveProduction = activeDataSource === 'supabase_live' || Boolean(authUser);
+
+  const resetToDemoData = useCallback(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(DATA_SOURCE_KEY, 'demo_mode');
+      localStorage.removeItem(LOCAL_STORAGE_KEY);
+    }
+    setActiveDataSource('demo_mode');
+    setAuthUser(null);
+    setAuthProfile(null);
+    setCurrentRole('psychologist');
+    setCurrentPsychologist(INITIAL_PSYCHOLOGIST);
+    setPatients(INITIAL_PATIENTS);
+    setAppointments(INITIAL_APPOINTMENTS);
+    setSessions(INITIAL_SESSIONS);
+    setGoals(INITIAL_GOALS);
+    setExerciseTemplates(INITIAL_EXERCISE_TEMPLATES);
+    setAssignedExercises(INITIAL_ASSIGNED_EXERCISES);
+    setDiaryEntries(INITIAL_DIARY_ENTRIES);
+    setMoodLogs(INITIAL_MOOD_LOGS);
+    setContentItems(INITIAL_CONTENT_ITEMS);
+    setPatientContents(INITIAL_PATIENT_CONTENTS);
+    setNotifications(INITIAL_NOTIFICATIONS);
+    setPsychometricResults(INITIAL_PSYCHOMETRIC_RESULTS);
+    setCognitiveDiagrams(INITIAL_COGNITIVE_DIAGRAMS);
+    setVoiceAnchors(INITIAL_VOICE_ANCHORS);
+    setPatientInvites(INITIAL_INVITES);
+    setClinic(INITIAL_CLINIC);
+    setClinicPsychologists(INITIAL_CLINIC_PSYCHOLOGISTS);
+    setClinicRooms(INITIAL_CLINIC_ROOMS);
+    setSaasPlans(INITIAL_SAAS_PLANS);
+    setSaasTenants(INITIAL_SAAS_TENANTS);
+    setPlatformLogs(INITIAL_PLATFORM_LOGS);
+    setCurrentPatientId(INITIAL_PATIENTS[0]?.id || '');
+  }, []);
 
   // Carregar dados reais do Supabase para o usuário autenticado
   const loadLiveDataFromSupabase = useCallback(async () => {
@@ -183,6 +256,9 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       setAuthUser(user);
       setActiveDataSource('supabase_live');
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(DATA_SOURCE_KEY, 'supabase_live');
+      }
 
       const provisioned = await SupabaseService.ensureProfileAndPsychologist(user);
       if (provisioned) {
@@ -253,6 +329,11 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       profile: newProfile
     };
 
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(DATA_SOURCE_KEY, 'supabase_live');
+      localStorage.removeItem(LOCAL_STORAGE_KEY);
+    }
+
     setAuthProfile(newProfile);
     setCurrentPsychologist(newPsychologist);
     setCurrentRole('psychologist');
@@ -315,41 +396,54 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return () => {
       subscription.unsubscribe();
     };
-  }, [loadLiveDataFromSupabase]);
+  }, [loadLiveDataFromSupabase, resetToDemoData]);
 
-  // Carregar do LocalStorage na montagem (modo demo / persistência offline)
+  // Carregar do LocalStorage APENAS na montagem inicial (modo demo / persistência offline)
+  const isLocalStorageLoaded = useRef(false);
+
   useEffect(() => {
+    if (isLocalStorageLoaded.current) return;
+    isLocalStorageLoaded.current = true;
+
     try {
       const savedSource = localStorage.getItem(DATA_SOURCE_KEY);
       if (savedSource === 'supabase_live' || savedSource === 'demo_mode') {
         setActiveDataSource(savedSource);
       }
 
-      const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
-      if (saved && (!authUser || activeDataSource === 'demo_mode')) {
-        const parsed = JSON.parse(saved);
-        if (parsed.patients) setPatients(parsed.patients);
-        if (parsed.appointments) setAppointments(parsed.appointments);
-        if (parsed.sessions) setSessions(parsed.sessions);
-        if (parsed.goals) setGoals(parsed.goals);
-        if (parsed.exerciseTemplates) setExerciseTemplates(parsed.exerciseTemplates);
-        if (parsed.assignedExercises) setAssignedExercises(parsed.assignedExercises);
-        if (parsed.diaryEntries) setDiaryEntries(parsed.diaryEntries);
-        if (parsed.moodLogs) setMoodLogs(parsed.moodLogs);
-        if (parsed.contentItems) setContentItems(parsed.contentItems);
-        if (parsed.patientContents) setPatientContents(parsed.patientContents);
-        if (parsed.notifications) setNotifications(parsed.notifications);
-        if (parsed.psychometricResults) setPsychometricResults(parsed.psychometricResults);
-        if (parsed.cognitiveDiagrams) setCognitiveDiagrams(parsed.cognitiveDiagrams);
-        if (parsed.voiceAnchors) setVoiceAnchors(parsed.voiceAnchors);
-        if (parsed.patientInvites) setPatientInvites(parsed.patientInvites);
-        if (parsed.currentRole) setCurrentRole(parsed.currentRole);
-        if (parsed.currentPatientId) setCurrentPatientId(parsed.currentPatientId);
+      if (savedSource !== 'supabase_live') {
+        const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed.patients) setPatients(parsed.patients);
+          if (parsed.appointments) setAppointments(parsed.appointments);
+          if (parsed.sessions) setSessions(parsed.sessions);
+          if (parsed.goals) setGoals(parsed.goals);
+          if (parsed.exerciseTemplates) setExerciseTemplates(parsed.exerciseTemplates);
+          if (parsed.assignedExercises) setAssignedExercises(parsed.assignedExercises);
+          if (parsed.diaryEntries) setDiaryEntries(parsed.diaryEntries);
+          if (parsed.moodLogs) setMoodLogs(parsed.moodLogs);
+          if (parsed.contentItems) setContentItems(parsed.contentItems);
+          if (parsed.patientContents) setPatientContents(parsed.patientContents);
+          if (parsed.notifications) setNotifications(parsed.notifications);
+          if (parsed.psychometricResults) setPsychometricResults(parsed.psychometricResults);
+          if (parsed.cognitiveDiagrams) setCognitiveDiagrams(parsed.cognitiveDiagrams);
+          if (parsed.voiceAnchors) setVoiceAnchors(parsed.voiceAnchors);
+          if (parsed.patientInvites) setPatientInvites(parsed.patientInvites);
+          if (parsed.clinic) setClinic(parsed.clinic);
+          if (parsed.clinicPsychologists) setClinicPsychologists(parsed.clinicPsychologists);
+          if (parsed.clinicRooms) setClinicRooms(parsed.clinicRooms);
+          if (parsed.saasPlans) setSaasPlans(parsed.saasPlans);
+          if (parsed.saasTenants) setSaasTenants(parsed.saasTenants);
+          if (parsed.platformLogs) setPlatformLogs(parsed.platformLogs);
+          if (parsed.currentRole) setCurrentRole(parsed.currentRole);
+          if (parsed.currentPatientId) setCurrentPatientId(parsed.currentPatientId);
+        }
       }
     } catch (e) {
       console.warn('Erro ao restaurar dados do localStorage:', e);
     }
-  }, [authUser, activeDataSource]);
+  }, []);
 
   // Salvar no LocalStorage a cada alteração
   useEffect(() => {
@@ -371,6 +465,12 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         cognitiveDiagrams,
         voiceAnchors,
         patientInvites,
+        clinic,
+        clinicPsychologists,
+        clinicRooms,
+        saasPlans,
+        saasTenants,
+        platformLogs,
         currentRole,
         currentPatientId,
       };
@@ -394,6 +494,12 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     cognitiveDiagrams,
     voiceAnchors,
     patientInvites,
+    clinic,
+    clinicPsychologists,
+    clinicRooms,
+    saasPlans,
+    saasTenants,
+    platformLogs,
     currentRole,
     currentPatientId,
     activeDataSource
@@ -899,27 +1005,100 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return voiceAnchors.filter(v => v.patient_id === targetId);
   }, [voiceAnchors, currentPatient]);
 
-  const resetToDemoData = useCallback(() => {
-    setPatients(INITIAL_PATIENTS);
-    setAppointments(INITIAL_APPOINTMENTS);
-    setSessions(INITIAL_SESSIONS);
-    setGoals(INITIAL_GOALS);
-    setExerciseTemplates(INITIAL_EXERCISE_TEMPLATES);
-    setAssignedExercises(INITIAL_ASSIGNED_EXERCISES);
-    setDiaryEntries(INITIAL_DIARY_ENTRIES);
-    setMoodLogs(INITIAL_MOOD_LOGS);
-    setContentItems(INITIAL_CONTENT_ITEMS);
-    setPatientContents(INITIAL_PATIENT_CONTENTS);
-    setNotifications(INITIAL_NOTIFICATIONS);
-    setPsychometricResults(INITIAL_PSYCHOMETRIC_RESULTS);
-    setCognitiveDiagrams(INITIAL_COGNITIVE_DIAGRAMS);
-    setVoiceAnchors(INITIAL_VOICE_ANCHORS);
-    setPatientInvites(INITIAL_INVITES);
-    setCurrentRole('psychologist');
-    setCurrentPsychologist(INITIAL_PSYCHOLOGIST);
-    setCurrentPatientId(INITIAL_PATIENTS[0]?.id || '');
-    localStorage.removeItem(LOCAL_STORAGE_KEY);
+  // Ações do Gerente da Clínica (Dono da Clínica)
+  const addClinicPsychologist = useCallback((psychologistData: Omit<ClinicPsychologist, 'id' | 'clinic_id' | 'joined_at'>) => {
+    const newPsico: ClinicPsychologist = {
+      ...psychologistData,
+      id: `cpsi-${Date.now()}`,
+      clinic_id: clinic.id,
+      joined_at: new Date().toISOString(),
+    };
+    setClinicPsychologists(prev => [...prev, newPsico]);
+    addNotification({
+      recipient_role: 'manager',
+      title: 'Novo Profissional Cadastrado',
+      message: `${psychologistData.full_name} (${psychologistData.crp}) foi adicionado(a) à equipe da clínica.`,
+      type: 'invite_accepted',
+      read: false,
+    });
+  }, [clinic.id, addNotification]);
+
+  const updateClinicPsychologist = useCallback((id: string, updates: Partial<ClinicPsychologist>) => {
+    setClinicPsychologists(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
   }, []);
+
+  const reassignPatientPsychologist = useCallback((patientId: string, newPsychologistId: string, newPsychologistName: string) => {
+    setPatients(prev => prev.map(p => {
+      if (p.id === patientId) {
+        return {
+          ...p,
+          clinical_notes_overview: `${p.clinical_notes_overview || ''}\n[Reatribuição Institucional]: Transferido para ${newPsychologistName} em ${new Date().toLocaleDateString('pt-BR')}.`
+        };
+      }
+      return p;
+    }));
+    addNotification({
+      recipient_role: 'manager',
+      title: 'Paciente Reatribuído',
+      message: `O paciente foi redistribuído com sucesso para o terapeuta ${newPsychologistName}.`,
+      type: 'invite_accepted',
+      read: false,
+    });
+  }, [addNotification]);
+
+  const updateRoomStatus = useCallback((roomId: string, status: 'available' | 'occupied' | 'maintenance', sessionInfo?: any) => {
+    setClinicRooms(prev => prev.map(r => r.id === roomId ? { ...r, status, current_session_info: sessionInfo } : r));
+  }, []);
+
+  // Ações do SuperAdmin (Dono do SaaS)
+  const updateTenantStatus = useCallback((tenantId: string, status: 'active' | 'trial' | 'past_due' | 'suspended') => {
+    setSaasTenants(prev => prev.map(t => t.id === tenantId ? { ...t, status } : t));
+    addNotification({
+      recipient_role: 'superadmin',
+      title: 'Status de Tenant Atualizado',
+      message: `O status da clínica foi alterado para: ${status.toUpperCase()}.`,
+      type: 'invite_accepted',
+      read: false,
+    });
+  }, [addNotification]);
+
+  const updateTenantPlan = useCallback((tenantId: string, planCode: 'single' | 'clinic_pro' | 'clinic_enterprise') => {
+    const plan = saasPlans.find(p => p.code === planCode);
+    setSaasTenants(prev => prev.map(t => {
+      if (t.id === tenantId) {
+        return {
+          ...t,
+          plan_code: planCode,
+          monthly_mrr: plan?.price_monthly || t.monthly_mrr,
+          max_psychologists: plan?.max_psychologists || t.max_psychologists
+        };
+      }
+      return t;
+    }));
+    addNotification({
+      recipient_role: 'superadmin',
+      title: 'Upgrade/Downgrade de Plano',
+      message: `Plano do tenant atualizado para ${plan?.name || planCode}.`,
+      type: 'invite_accepted',
+      read: false,
+    });
+  }, [saasPlans, addNotification]);
+
+  const addTenant = useCallback((tenantData: Omit<SaaSTenant, 'id' | 'created_at'>) => {
+    const newTenant: SaaSTenant = {
+      ...tenantData,
+      id: `tenant-${Date.now()}`,
+      created_at: new Date().toISOString()
+    };
+    setSaasTenants(prev => [newTenant, ...prev]);
+    addNotification({
+      recipient_role: 'superadmin',
+      title: 'Nova Clínica Assinante',
+      message: `${tenantData.clinic_name} foi cadastrada com sucesso no plano ${tenantData.plan_code}.`,
+      type: 'invite_accepted',
+      read: false,
+    });
+  }, [addNotification]);
 
   return (
     <PsiContext.Provider
@@ -951,6 +1130,12 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         cognitiveDiagrams,
         voiceAnchors,
         patientInvites,
+        clinic,
+        clinicPsychologists,
+        clinicRooms,
+        saasPlans,
+        saasTenants,
+        platformLogs,
         unreadNotificationsCount,
         markNotificationAsRead,
         markAllNotificationsAsRead,
@@ -973,6 +1158,13 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addVoiceAnchor,
         createPatientInvite,
         acceptPatientInvite,
+        addClinicPsychologist,
+        updateClinicPsychologist,
+        reassignPatientPsychologist,
+        updateRoomStatus,
+        updateTenantStatus,
+        updateTenantPlan,
+        addTenant,
         submitExerciseResponse,
         addDiaryEntry,
         updateDiaryEntry,

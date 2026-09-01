@@ -46,8 +46,11 @@ import { EmptyState } from '@/components/common/EmptyState';
 import { formatDate, formatDateTime, formatRelativeDate } from '@/lib/utils';
 import { SessionFormModal } from './SessionFormModal';
 import { ExerciseBuilderModal } from './ExerciseBuilderModal';
+import { ExerciseReviewModal } from './ExerciseReviewModal';
 import { ClinicalReportModal } from './ClinicalReportModal';
 import { LiveSessionModal } from './LiveSessionModal';
+import { PatientTimelineView } from './PatientTimelineView';
+import { ExportRecordModal } from './ExportRecordModal';
 import { PsychometricScalesModal } from '@/components/common/PsychometricScalesModal';
 import { Play, Brain } from 'lucide-react';
 import {
@@ -67,7 +70,7 @@ interface PatientDetailViewProps {
   onBack: () => void;
 }
 
-type TabType = 'overview' | 'sessions' | 'goals' | 'exercises' | 'scales' | 'diary' | 'mood' | 'contents';
+type TabType = 'overview' | 'timeline' | 'sessions' | 'goals' | 'exercises' | 'scales' | 'diary' | 'mood' | 'contents';
 
 export const PatientDetailView: React.FC<PatientDetailViewProps> = ({ patientId, onBack }) => {
   const {
@@ -94,6 +97,7 @@ export const PatientDetailView: React.FC<PatientDetailViewProps> = ({ patientId,
   const [isSessionModalOpen, setIsSessionModalOpen] = useState(false);
   const [sessionToEdit, setSessionToEdit] = useState<TherapySession | null>(null);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+  const [isExportRecordOpen, setIsExportRecordOpen] = useState(false);
   const [isLiveSessionModalOpen, setIsLiveSessionModalOpen] = useState(false);
   const [isScalesModalOpen, setIsScalesModalOpen] = useState(false);
 
@@ -199,7 +203,8 @@ export const PatientDetailView: React.FC<PatientDetailViewProps> = ({ patientId,
 
   const tabs: { id: TabType; label: string; icon: React.FC<{ className?: string }>; count?: number }[] = [
     { id: 'overview', label: 'Visão Geral', icon: Activity },
-    { id: 'sessions', label: 'Sessões & Timeline', icon: Calendar, count: patientSessions.length },
+    { id: 'timeline', label: 'Timeline 360°', icon: Sparkles },
+    { id: 'sessions', label: 'Sessões & SOAP', icon: Calendar, count: patientSessions.length },
     { id: 'goals', label: 'Objetivos Terapêuticos', icon: Target, count: patientGoals.length },
     { id: 'exercises', label: 'Exercícios', icon: ClipboardList, count: patientExercises.length },
     { id: 'scales', label: 'Escalas & Testes', icon: Brain, count: patientPsychometrics.length },
@@ -293,7 +298,18 @@ export const PatientDetailView: React.FC<PatientDetailViewProps> = ({ patientId,
               title="Emitir Relatório de Evolução ou Declaração CFP"
             >
               <Printer className="w-3.5 h-3.5 mr-1" />
-              Emitir Relatório / Doc
+              Emitir Relatório
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsExportRecordOpen(true)}
+              className="text-xs text-indigo-700 border-indigo-200 hover:bg-indigo-50 flex items-center gap-1 font-semibold"
+              title="Exportar Prontuário Completo com Assinatura Criptográfica"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              Exportar Prontuário (LGPD)
             </Button>
 
             <Button
@@ -342,6 +358,11 @@ export const PatientDetailView: React.FC<PatientDetailViewProps> = ({ patientId,
       </div>
 
       {/* CONTEÚDO DAS ABAS */}
+
+      {/* 0. ABA: TIMELINE 360° */}
+      {activeTab === 'timeline' && (
+        <PatientTimelineView patientId={patient.id} />
+      )}
 
       {/* 1. ABA: VISÃO GERAL */}
       {activeTab === 'overview' && (
@@ -1266,82 +1287,12 @@ export const PatientDetailView: React.FC<PatientDetailViewProps> = ({ patientId,
         </div>
       </Modal>
 
-      {/* Modal Avaliação de Respostas de Exercício */}
-      {selectedExerciseForReview && (
-        <Modal
-          isOpen={Boolean(selectedExerciseForReview)}
-          onClose={() => setSelectedExerciseForReview(null)}
-          title={`Revisão: ${selectedExerciseForReview.title}`}
-          description={`Respostas enviadas por ${selectedExerciseForReview.patient_name || patient.full_name}`}
-          maxWidth="2xl"
-        >
-          <form onSubmit={handleSaveFeedback} className="space-y-5">
-            {/* Exibição das Respostas */}
-            <div className="space-y-3 bg-slate-50/80 p-4 rounded-2xl border border-slate-100">
-              <h4 className="text-xs font-bold text-slate-600 uppercase tracking-wider">Respostas do Paciente:</h4>
-              {selectedExerciseForReview.schema_fields.map(field => {
-                const answerValue = selectedExerciseForReview.answer?.responses?.[field.id];
-                return (
-                  <div key={field.id} className="p-3 bg-white rounded-xl border border-slate-200/80 space-y-1">
-                    <p className="text-xs font-semibold text-slate-700">{field.label}</p>
-                    <p className="text-xs text-teal-900 bg-teal-50/50 p-2 rounded-lg font-medium">
-                      {answerValue !== undefined ? String(answerValue) : 'Não respondido'}
-                    </p>
-                  </div>
-                );
-              })}
-
-              {selectedExerciseForReview.answer?.patient_notes && (
-                <div className="p-3 bg-white rounded-xl border border-slate-200/80">
-                  <p className="text-xs font-semibold text-slate-700">Comentário Adicional do Paciente:</p>
-                  <p className="text-xs text-slate-600 italic mt-0.5">"{selectedExerciseForReview.answer.patient_notes}"</p>
-                </div>
-              )}
-            </div>
-
-            {/* Formulário de Feedback Clínico */}
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Feedback Terapêutico (Visível para o Paciente) *
-                </label>
-                <textarea
-                  value={feedbackText}
-                  onChange={e => setFeedbackText(e.target.value)}
-                  rows={3}
-                  placeholder="Escreva um comentário acolhedor validando o esforço e destacando os pontos fortes da resposta..."
-                  className="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 focus:ring-2 focus:ring-teal-500 focus:outline-none"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-purple-900 mb-1 flex items-center gap-1.5">
-                  <Lock className="w-3.5 h-3.5 text-purple-700" />
-                  Observação Clínica Privativa (Apenas Psicólogo)
-                </label>
-                <input
-                  type="text"
-                  value={clinicalObservations}
-                  onChange={e => setClinicalObservations(e.target.value)}
-                  placeholder="Anotação para supervisão ou plano de sessão..."
-                  className="w-full px-3 py-2 text-xs rounded-xl border border-purple-200 bg-purple-50/30 focus:ring-2 focus:ring-purple-500 focus:outline-none"
-                />
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
-              <Button type="button" variant="outline" size="sm" onClick={() => setSelectedExerciseForReview(null)}>
-                Fechar
-              </Button>
-              <Button type="submit" variant="primary" size="sm" className="font-semibold">
-                <Send className="w-3.5 h-3.5 mr-1" />
-                Salvar e Enviar Feedback
-              </Button>
-            </div>
-          </form>
-        </Modal>
-      )}
+      {/* Modal Avaliação de Respostas de Exercício com IA e Sigilo */}
+      <ExerciseReviewModal
+        exercise={selectedExerciseForReview}
+        isOpen={Boolean(selectedExerciseForReview)}
+        onClose={() => setSelectedExerciseForReview(null)}
+      />
 
       {/* Modal Enviar Material */}
       <Modal
@@ -1402,6 +1353,13 @@ export const PatientDetailView: React.FC<PatientDetailViewProps> = ({ patientId,
         patient={patient}
         isOpen={isLiveSessionModalOpen}
         onClose={() => setIsLiveSessionModalOpen(false)}
+      />
+
+      {/* Modal de Exportação de Prontuário Criptográfico */}
+      <ExportRecordModal
+        patientId={patient.id}
+        isOpen={isExportRecordOpen}
+        onClose={() => setIsExportRecordOpen(false)}
       />
 
       {/* Modal de Escalas Psicométricas */}

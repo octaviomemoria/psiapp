@@ -56,6 +56,22 @@ export const CopingCardsModal: React.FC<{ isOpen: boolean; onClose: () => void }
   const [newReminder, setNewReminder] = useState('');
   const [newAction, setNewAction] = useState('');
 
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('psiapp_coping_cards');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setCards(parsed);
+          }
+        }
+      } catch (e) {
+        console.warn('Erro ao carregar coping cards:', e);
+      }
+    }
+  }, [isOpen]);
+
   const handleAddCard = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTrigger || !newReminder) return;
@@ -77,7 +93,11 @@ export const CopingCardsModal: React.FC<{ isOpen: boolean; onClose: () => void }
       color: randomColor
     };
 
-    setCards(prev => [newCard, ...prev]);
+    const updated = [newCard, ...cards];
+    setCards(updated);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('psiapp_coping_cards', JSON.stringify(updated));
+    }
     setNewTrigger('');
     setNewReminder('');
     setNewAction('');
@@ -85,7 +105,11 @@ export const CopingCardsModal: React.FC<{ isOpen: boolean; onClose: () => void }
   };
 
   const handleDeleteCard = (id: string) => {
-    setCards(prev => prev.filter(c => c.id !== id));
+    const updated = cards.filter(c => c.id !== id);
+    setCards(updated);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('psiapp_coping_cards', JSON.stringify(updated));
+    }
   };
 
   return (

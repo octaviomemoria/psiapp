@@ -15,12 +15,14 @@ import {
   Users,
   ChevronRight,
   Sparkles,
-  Search
+  Search,
+  MessageSquare
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Modal } from '@/components/ui/Modal';
+import { WhatsAppReminderModal } from './WhatsAppReminderModal';
 import { formatDate, formatDateTime, formatRelativeDate } from '@/lib/utils';
 
 interface AgendaViewProps {
@@ -32,6 +34,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ onSelectPatient }) => {
 
   const [filter, setFilter] = useState<'all' | 'upcoming' | 'completed' | 'canceled'>('upcoming');
   const [isNewAppointmentOpen, setIsNewAppointmentOpen] = useState(false);
+  const [selectedAppointmentForWhatsApp, setSelectedAppointmentForWhatsApp] = useState<Appointment | null>(null);
 
   // Form State Novo Agendamento
   const [patientId, setPatientId] = useState(patients[0]?.id || '');
@@ -249,6 +252,17 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ onSelectPatient }) => {
                   <Button
                     variant="outline"
                     size="sm"
+                    onClick={() => setSelectedAppointmentForWhatsApp(appointment)}
+                    className="text-xs text-emerald-700 border-emerald-200 hover:bg-emerald-50 flex items-center gap-1 font-semibold"
+                    title="Disparar Lembrete / Confirmação no WhatsApp"
+                  >
+                    <MessageSquare className="w-3.5 h-3.5" />
+                    WhatsApp
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
                     onClick={() => onSelectPatient(appointment.patient_id)}
                     className="text-xs"
                   >
@@ -260,6 +274,19 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ onSelectPatient }) => {
           })
         )}
       </div>
+
+      {/* Modal de Lembretes WhatsApp */}
+      {selectedAppointmentForWhatsApp && (
+        <WhatsAppReminderModal
+          isOpen={Boolean(selectedAppointmentForWhatsApp)}
+          onClose={() => setSelectedAppointmentForWhatsApp(null)}
+          patientName={selectedAppointmentForWhatsApp.patient_name || 'Paciente'}
+          patientPhone="(11) 98765-4321"
+          sessionDate={selectedAppointmentForWhatsApp.starts_at.slice(0, 10)}
+          sessionTime={selectedAppointmentForWhatsApp.starts_at.slice(11, 16)}
+          psychologistName={currentPsychologist.profile?.full_name || 'Dra. Ana Martins'}
+        />
+      )}
 
       {/* Modal Novo Agendamento */}
       <Modal

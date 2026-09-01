@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { usePsi } from '@/lib/store/psi-context';
+import { INITIAL_TEST_ACCOUNTS } from '@/lib/store/initial-data';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
 import { SupabaseService } from '@/lib/supabase/service';
 import { Modal } from '@/components/ui/Modal';
@@ -18,7 +19,10 @@ import {
   KeyRound,
   Sparkles,
   ArrowRight,
-  RefreshCw
+  RefreshCw,
+  Building2,
+  Crown,
+  Heart
 } from 'lucide-react';
 
 interface AuthModalProps {
@@ -55,6 +59,31 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
     setSuccessMsg(null);
   };
 
+  // Função para login rápido em 1 clique
+  const handleQuickLogin = (testEmail: string, testPass: string, role: string) => {
+    setEmail(testEmail);
+    setPassword(testPass);
+    setErrorMsg(null);
+
+    if (testEmail === 'gerente@teste.com') {
+      switchRole('manager');
+      setSuccessMsg('Conectado como Gerente da Clínica (Carlos Drummond)!');
+    } else if (testEmail === 'superadmin@teste.com') {
+      switchRole('superadmin');
+      setSuccessMsg('Conectado como SuperAdmin do SaaS (Octávio Memória)!');
+    } else if (testEmail === 'psicologo@teste.com') {
+      switchRole('psychologist');
+      setSuccessMsg('Conectado como Psicóloga Clínica (Dra. Ana Martins)!');
+    } else {
+      switchRole('patient', 'pat-mariana-costa');
+      setSuccessMsg('Conectado como Paciente (Mariana Costa)!');
+    }
+
+    setTimeout(() => {
+      onClose();
+    }, 700);
+  };
+
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
@@ -62,6 +91,32 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
     setLoading(true);
 
     try {
+      // 1. Reconhecimento automático dos usuários de teste solicitados
+      if (email === 'gerente@teste.com') {
+        switchRole('manager');
+        setSuccessMsg('Conectado como Gerente da Clínica!');
+        setTimeout(() => onClose(), 600);
+        return;
+      }
+      if (email === 'superadmin@teste.com') {
+        switchRole('superadmin');
+        setSuccessMsg('Conectado como SuperAdmin da Plataforma!');
+        setTimeout(() => onClose(), 600);
+        return;
+      }
+      if (email === 'psicologo@teste.com') {
+        switchRole('psychologist');
+        setSuccessMsg('Conectado como Psicóloga Clínica!');
+        setTimeout(() => onClose(), 600);
+        return;
+      }
+      if (email === 'paciente@teste.com') {
+        switchRole('patient', 'pat-mariana-costa');
+        setSuccessMsg('Conectado como Paciente!');
+        setTimeout(() => onClose(), 600);
+        return;
+      }
+
       if (isSupabaseConfigured && supabase) {
         if (mode === 'login') {
           const { data, error } = await supabase.auth.signInWithPassword({
@@ -72,7 +127,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
           if (data.user) {
             await loadLiveDataFromSupabase();
           }
-          setSuccessMsg('Login realizado com sucesso! Carregando consultório...');
+          setSuccessMsg('Login realizado com sucesso! Carregando ambiente...');
           setTimeout(() => {
             onClose();
           }, 800);
@@ -151,7 +206,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
           setSuccessMsg(`Bem-vindo(a), ${fullName}! Conta criada com sucesso.`);
           setTimeout(() => onClose(), 800);
         } else if (mode === 'login') {
-          if (email.includes('ana') || email.includes('psi') || !email.includes('paciente')) {
+          if (email.includes('gerente')) {
+            switchRole('manager');
+            setSuccessMsg('Conectado como Gerente da Clínica!');
+          } else if (email.includes('admin') || email.includes('super')) {
+            switchRole('superadmin');
+            setSuccessMsg('Conectado como SuperAdmin!');
+          } else if (email.includes('ana') || email.includes('psi') || !email.includes('paciente')) {
             switchRole('psychologist');
             setSuccessMsg('Conectado como Psicóloga!');
           } else {
@@ -177,7 +238,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
       onClose={onClose}
       title={
         mode === 'login'
-          ? 'Entrar no PsiApp'
+          ? 'Acessar o PsiApp'
           : mode === 'register_psychologist'
           ? 'Cadastro de Psicólogo(a)'
           : mode === 'register_patient'
@@ -187,11 +248,69 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
       description={
         isSupabaseConfigured
           ? 'Autenticação segura e criptografada via Supabase Auth.'
-          : 'Modo demonstração ativo com persistência local.'
+          : 'Selecione uma conta de teste abaixo ou digite seu login.'
       }
-      maxWidth="md"
+      maxWidth="lg"
     >
       <div className="space-y-4">
+        {/* ========================================================================= */}
+        {/* 1. SEÇÃO DE CONTAS DE TESTE PADRÃO (1-CLIQUE) */}
+        {/* ========================================================================= */}
+        {mode === 'login' && (
+          <div className="space-y-2 p-3.5 rounded-2xl bg-gradient-to-br from-slate-50 to-indigo-50/40 border border-slate-200">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                Acesso Rápido de Teste (1-Clique):
+              </span>
+              <span className="text-[10px] text-slate-500 font-medium">Credenciais preenchidas</span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              {INITIAL_TEST_ACCOUNTS.map(acc => (
+                <button
+                  key={acc.email}
+                  type="button"
+                  onClick={() => handleQuickLogin(acc.email, acc.password, acc.role)}
+                  className="p-2.5 rounded-xl bg-white border border-slate-200/90 hover:border-indigo-400 hover:shadow-xs transition-all text-left flex items-start gap-2 group"
+                >
+                  <div
+                    className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 text-xs font-bold ${
+                      acc.role === 'patient'
+                        ? 'bg-teal-100 text-teal-800'
+                        : acc.role === 'psychologist'
+                        ? 'bg-purple-100 text-purple-800'
+                        : acc.role === 'manager'
+                        ? 'bg-indigo-100 text-indigo-800'
+                        : 'bg-amber-100 text-amber-900'
+                    }`}
+                  >
+                    {acc.role === 'patient' && <Heart className="w-3.5 h-3.5" />}
+                    {acc.role === 'psychologist' && <Brain className="w-3.5 h-3.5" />}
+                    {acc.role === 'manager' && <Building2 className="w-3.5 h-3.5" />}
+                    {acc.role === 'superadmin' && <Crown className="w-3.5 h-3.5" />}
+                  </div>
+
+                  <div className="min-w-0">
+                    <span className="font-bold text-xs text-slate-900 block truncate group-hover:text-indigo-600">
+                      {acc.role === 'patient'
+                        ? 'Paciente'
+                        : acc.role === 'psychologist'
+                        ? 'Psicólogo'
+                        : acc.role === 'manager'
+                        ? 'Gerente da Clínica'
+                        : 'SuperAdmin SaaS'}
+                    </span>
+                    <span className="text-[10px] text-slate-500 block truncate font-mono">
+                      {acc.email}
+                    </span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Status de Conexão com Supabase */}
         <div className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl border border-slate-200/80 text-xs">
           <div className="flex items-center gap-2">
@@ -349,7 +468,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
             variant="primary"
             size="md"
             disabled={loading}
-            className="w-full font-bold shadow-sm mt-2"
+            className="w-full font-bold shadow-sm mt-2 bg-indigo-600 hover:bg-indigo-700"
           >
             {loading ? (
               <RefreshCw className="w-4 h-4 animate-spin mr-1" />
@@ -374,7 +493,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                 <button
                   type="button"
                   onClick={() => setMode('register_psychologist')}
-                  className="text-teal-700 font-bold hover:underline"
+                  className="text-indigo-600 font-bold hover:underline"
                 >
                   Cadastre-se aqui
                 </button>
@@ -396,7 +515,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
               <button
                 type="button"
                 onClick={() => setMode('login')}
-                className="text-teal-700 font-bold hover:underline"
+                className="text-indigo-600 font-bold hover:underline"
               >
                 Fazer login
               </button>
