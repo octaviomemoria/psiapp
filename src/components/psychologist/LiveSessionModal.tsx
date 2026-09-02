@@ -23,6 +23,7 @@ import {
   AlertTriangle,
   ArrowRight,
   Plus,
+  Trash2,
   Save,
   MessageSquare,
   ShieldCheck
@@ -55,13 +56,29 @@ export const LiveSessionModal: React.FC<LiveSessionModalProps> = ({
   const [isTimerRunning, setIsTimerRunning] = useState(false);
   const [activeTab, setActiveTab] = useState<'soap' | 'diagram' | 'suds' | 'voice' | 'private'>('soap');
 
-  // Dados SOAP
+  // Dados SOAP & Tarefas
   const [subjective, setSubjective] = useState('');
   const [objective, setObjective] = useState('');
   const [assessment, setAssessment] = useState('');
   const [plan, setPlan] = useState('');
-  const [homework, setHomework] = useState('');
+  const [tasks, setTasks] = useState<string[]>(['']);
   const [modality, setModality] = useState<SessionModality>('online');
+
+  const handleAddTask = () => {
+    setTasks(prev => [...prev, '']);
+  };
+
+  const handleUpdateTask = (index: number, val: string) => {
+    setTasks(prev => {
+      const next = [...prev];
+      next[index] = val;
+      return next;
+    });
+  };
+
+  const handleRemoveTask = (index: number) => {
+    setTasks(prev => prev.filter((_, i) => i !== index));
+  };
 
   // Notas Privadas do Psicólogo
   const [privateHypothesis, setPrivateHypothesis] = useState('');
@@ -187,7 +204,10 @@ export const LiveSessionModal: React.FC<LiveSessionModalProps> = ({
       setObjective(soap.objective);
       setAssessment(soap.assessment);
       setPlan(soap.plan);
-      setHomework('Realizar o exercício de RPD (Registro de Pensamentos Disfuncionais) pelo menos 2x na semana.');
+      setTasks([
+        'Realizar o exercício de RPD (Registro de Pensamentos Disfuncionais) pelo menos 2x na semana.',
+        'Praticar respiração diafragmática / regulação emocional diariamente por 5 minutos.'
+      ]);
     } catch (err) {
       console.error('Erro ao gerar SOAP com IA:', err);
     } finally {
@@ -197,6 +217,8 @@ export const LiveSessionModal: React.FC<LiveSessionModalProps> = ({
 
   const handleFinishSession = () => {
     const elapsedMinutes = Math.max(1, Math.round((50 * 60 - secondsLeft) / 60));
+    const validTasks = tasks.map(t => t.trim()).filter(t => t.length > 0);
+    const combinedHomework = validTasks.length > 0 ? validTasks.join('\n• ') : 'Nenhuma tarefa prescrita.';
     
     // Salvar sessão oficial
     addSession(
@@ -213,7 +235,7 @@ export const LiveSessionModal: React.FC<LiveSessionModalProps> = ({
         soap_objective: objective,
         soap_assessment: assessment,
         soap_plan: plan,
-        homework_assigned: homework,
+        homework_assigned: combinedHomework,
         status: 'finalized',
       },
       privateHypothesis || supervisionNotes ? {
@@ -430,17 +452,47 @@ export const LiveSessionModal: React.FC<LiveSessionModalProps> = ({
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1">
-                  Tarefa Prescrita para o Paciente ("Entre Sessões")
-                </label>
-                <input
-                  type="text"
-                  value={homework}
-                  onChange={(e) => setHomework(e.target.value)}
-                  placeholder="Ex: Preencher 2x o formulário de RPD e praticar a respiração 4-7-8."
-                  className="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none"
-                />
+              <div className="space-y-2 pt-2 border-t border-slate-200/80 dark:border-slate-800">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                    Tarefas Prescritas para o Paciente ("Entre Sessões")
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleAddTask}
+                    className="inline-flex items-center gap-1.5 text-xs font-bold text-teal-700 dark:text-teal-300 bg-teal-50 dark:bg-teal-950/60 hover:bg-teal-100 dark:hover:bg-teal-900/80 px-3 py-1.5 rounded-xl transition-all border border-teal-200/80 shadow-2xs"
+                  >
+                    <Plus className="w-3.5 h-3.5 text-teal-600" />
+                    <span>Adicionar Nova Tarefa</span>
+                  </button>
+                </div>
+
+                <div className="space-y-2">
+                  {tasks.map((task, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-xl bg-teal-100 dark:bg-teal-900/60 text-teal-800 dark:text-teal-200 text-xs font-bold flex items-center justify-center shrink-0 border border-teal-200/50">
+                        {idx + 1}
+                      </div>
+                      <input
+                        type="text"
+                        value={task}
+                        onChange={(e) => handleUpdateTask(idx, e.target.value)}
+                        placeholder={`Tarefa ${idx + 1}: Ex: Preencher RPD, praticar respiração 4-7-8, ler texto...`}
+                        className="flex-1 px-3.5 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 focus:ring-2 focus:ring-teal-500 outline-none"
+                      />
+                      {tasks.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveTask(idx)}
+                          className="p-2 text-slate-400 hover:text-rose-600 rounded-xl hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                          title="Remover esta tarefa"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           )}

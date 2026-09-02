@@ -589,9 +589,11 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const unreadNotificationsCount = getCurrentUserNotifications().filter(n => !n.read).length;
 
   const addPatient = useCallback((patientData: Omit<Patient, 'id' | 'started_at'>): Patient => {
+    const psychId = patientData.psychologist_id || currentPsychologist.id;
     const newId = `pat-${Date.now()}`;
     const newPatient: Patient = {
       ...patientData,
+      psychologist_id: psychId,
       id: newId,
       started_at: new Date().toISOString(),
       profile: {
@@ -605,21 +607,22 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     };
     
-    // Atualização otimista
+    // Atualização otimista no estado da aplicação
     setPatients(prev => [newPatient, ...prev]);
     setCurrentPatientId(newPatient.id);
 
-    // Sincronização com Supabase
+    // Sincronização direta com o Supabase
     if (isSupabaseConfigured && isLiveProduction) {
       SupabaseService.insertPatient({
         ...patientData,
+        psychologist_id: psychId,
         status: 'active',
         started_at: new Date().toISOString()
       });
     }
 
     return newPatient;
-  }, [isLiveProduction]);
+  }, [isLiveProduction, currentPsychologist]);
 
   const updatePatient = useCallback((id: string, updates: Partial<Patient>) => {
     setPatients(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));

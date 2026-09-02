@@ -91,6 +91,7 @@ export interface Psychologist {
 
 export interface Patient {
   id: string;
+  psychologist_id?: string;
   linked_profile_id?: string;
   full_name: string;
   social_name?: string;

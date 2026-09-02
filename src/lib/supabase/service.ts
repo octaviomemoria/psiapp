@@ -153,12 +153,11 @@ export const SupabaseService = {
   async getPatients(psychologistId?: string): Promise<Patient[]> {
     if (!isSupabaseConfigured || !supabase) return [];
     try {
-      let query = supabase.from('patients').select('*').order('full_name', { ascending: true });
-      if (psychologistId) {
-        query = query.eq('psychologist_id', psychologistId);
-      }
+      const { data, error } = await supabase
+        .from('patients')
+        .select('*')
+        .order('full_name', { ascending: true });
 
-      const { data, error } = await query;
       if (error) {
         console.warn('Erro ao buscar pacientes:', error.message);
         return [];
@@ -173,9 +172,23 @@ export const SupabaseService = {
   async insertPatient(patient: Omit<Patient, 'id' | 'created_at' | 'updated_at'>): Promise<Patient | null> {
     if (!isSupabaseConfigured || !supabase) return null;
     try {
+      const payload: any = {
+        full_name: patient.full_name,
+        social_name: patient.social_name || null,
+        birth_date: patient.birth_date || '1995-01-01',
+        gender: patient.gender || 'Não informado',
+        email: patient.email,
+        phone: patient.phone || null,
+        emergency_contact_name: patient.emergency_contact_name || null,
+        emergency_contact_phone: patient.emergency_contact_phone || null,
+        status: patient.status || 'active',
+        started_at: patient.started_at || new Date().toISOString(),
+        clinical_notes_overview: patient.clinical_notes_overview || null
+      };
+
       const { data, error } = await supabase
         .from('patients')
-        .insert([patient])
+        .insert([payload])
         .select()
         .single();
 
