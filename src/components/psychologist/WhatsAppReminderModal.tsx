@@ -45,9 +45,13 @@ export const WhatsAppReminderModal: React.FC<WhatsAppReminderModalProps> = ({
   const fullInternationalPhone = cleanPhone.startsWith('55') ? cleanPhone : `55${cleanPhone}`;
 
   const meetLink = `https://meet.google.com/psi-ana-${Date.now().toString().slice(-4)}`;
+  
+  // Link de 1 clique para o paciente salvar no Google Agenda dele
+  const calStart = sessionDate.replace(/-/g, '') + 'T' + sessionTime.replace(':', '') + '00';
+  const googleCalLink = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(`Sessão de Psicoterapia — ${psychologistName}`)}&dates=${calStart}/${calStart}&details=${encodeURIComponent(`Sessão clínica com ${psychologistName} via PsiApp.`)}&sf=true`;
 
   const messageTemplates = {
-    '24h': `Olá, ${patientName}! 👋\n\nPassando para confirmar nossa sessão de psicoterapia amanhã, dia *${formatDate(sessionDate)}* às *${sessionTime}* com *${psychologistName}*.\n\nPor favor, responda com:\n1️⃣ *SIM*, confirmo minha presença!\n2️⃣ *REMARCAR* (caso precise de outro horário com 24h de antecedência).\n\nNos vemos amanhã! 🌿`,
+    '24h': `Olá, ${patientName}! 👋\n\nPassando para confirmar nossa sessão de psicoterapia amanhã, dia *${formatDate(sessionDate)}* às *${sessionTime}* com *${psychologistName}*.\n\n📅 *Salvar na sua Agenda do Google / Celular:*\n${googleCalLink}\n\nPor favor, responda com:\n1️⃣ *SIM*, confirmo minha presença!\n2️⃣ *REMARCAR* (caso precise de outro horário com antecedência).\n\nNos vemos amanhã! 🌿`,
     '2h': `Olá, ${patientName}! Tudo bem? 🌿\n\nNossa sessão de psicoterapia começa em *2 horas* (às *${sessionTime}*).\n\n🔗 Link direto para a nossa sala de teleconsulta segura:\n${meetLink}\n\nRecomendo buscar um local tranquilo e fones de ouvido. Até já! 🤍`,
     'reschedule': `Olá, ${patientName}! Tudo bem? 📅\n\nConforme conversamos, estamos reagendando sua sessão de psicoterapia. Por favor, me avise quais dos seguintes dias e horários ficam melhores para você nesta semana.\n\nAbraços,\n${psychologistName}`
   };
