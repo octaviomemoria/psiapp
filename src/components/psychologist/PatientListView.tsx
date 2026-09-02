@@ -16,7 +16,8 @@ import {
   Phone,
   Activity,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Trash2
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -31,7 +32,7 @@ interface PatientListViewProps {
 }
 
 export const PatientListView: React.FC<PatientListViewProps> = ({ onSelectPatient }) => {
-  const { patients, addPatient, sessions, assignedExercises, appointments } = usePsi();
+  const { patients, addPatient, deletePatient, sessions, assignedExercises, appointments } = usePsi();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'pending_exercises'>('all');
@@ -280,17 +281,30 @@ export const PatientListView: React.FC<PatientListViewProps> = ({ onSelectPatien
                 </div>
               </CardContent>
 
-              {/* Botão de Acesso ao Perfil 360 */}
-              <div className="p-4 pt-0">
+              {/* Botão de Acesso ao Perfil 360 & Ações */}
+              <div className="p-4 pt-0 flex items-center gap-2">
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => onSelectPatient(patient.id)}
-                  className="w-full justify-between text-xs font-semibold hover:border-teal-500 hover:text-teal-700"
+                  className="flex-1 justify-between text-xs font-semibold hover:border-teal-500 hover:text-teal-700"
                 >
                   <span>Acessar Prontuário & Evolução</span>
                   <ChevronRight className="w-3.5 h-3.5" />
                 </Button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (window.confirm(`Tem certeza que deseja remover o paciente "${patient.full_name}"?`)) {
+                      deletePatient(patient.id);
+                    }
+                  }}
+                  title="Excluir paciente"
+                  className="p-2 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
               </div>
             </Card>
           );

@@ -37,8 +37,30 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(`${appUrl}?calendar_sync_error=${encodeURIComponent(tokenData.error_description || tokenData.error)}`);
     }
 
-    // Sucesso! Retorna para o app com indicador de sucesso
-    return NextResponse.redirect(`${appUrl}?google_calendar_connected=true`);
+    // Sucesso! Define cookie com o token para sincronização e redireciona
+    const response = NextResponse.redirect(`${appUrl}?google_calendar_connected=true`);
+    
+    if (tokenData.access_token) {
+      response.cookies.set('google_cal_token', tokenData.access_token, {
+        httpOnly: false, // permite ao cliente ler para disparar a sincronização
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: tokenData.expires_in || 3600,
+        path: '/'
+      });
+    }
+
+    if (tokenData.refresh_token) {
+      response.cookies.set('google_cal_refresh_token', tokenData.refresh_token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 30 * 24 * 3600, // 30 dias
+        path: '/'
+      });
+    }
+
+    return response;
   } catch (err: any) {
     console.error('Erro ao conectar Google Calendar:', err);
     return NextResponse.redirect(`${appUrl}?calendar_sync_error=Falha+de+comunicacao+com+Google`);

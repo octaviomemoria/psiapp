@@ -333,17 +333,22 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ onSelectPatient }) => {
       />
 
       {/* Modal de Lembretes WhatsApp */}
-      {selectedAppointmentForWhatsApp && (
-        <WhatsAppReminderModal
-          isOpen={Boolean(selectedAppointmentForWhatsApp)}
-          onClose={() => setSelectedAppointmentForWhatsApp(null)}
-          patientName={selectedAppointmentForWhatsApp.patient_name || 'Paciente'}
-          patientPhone="(11) 98765-4321"
-          sessionDate={selectedAppointmentForWhatsApp.starts_at.slice(0, 10)}
-          sessionTime={selectedAppointmentForWhatsApp.starts_at.slice(11, 16)}
-          psychologistName={currentPsychologist.profile?.full_name || 'Dra. Ana Martins'}
-        />
-      )}
+      {selectedAppointmentForWhatsApp && (() => {
+        const appointmentPatient = patients.find(p => p.id === selectedAppointmentForWhatsApp.patient_id);
+        return (
+          <WhatsAppReminderModal
+            isOpen={Boolean(selectedAppointmentForWhatsApp)}
+            onClose={() => setSelectedAppointmentForWhatsApp(null)}
+            patientName={selectedAppointmentForWhatsApp.patient_name || appointmentPatient?.full_name || 'Paciente'}
+            patientPhone={appointmentPatient?.phone || '(11) 98765-4321'}
+            sessionDate={selectedAppointmentForWhatsApp.starts_at.slice(0, 10)}
+            sessionTime={selectedAppointmentForWhatsApp.starts_at.slice(11, 16)}
+            psychologistName={currentPsychologist.profile?.full_name || 'Dra. Ana Martins'}
+            sessionLink={selectedAppointmentForWhatsApp.location_or_link}
+            appointmentId={selectedAppointmentForWhatsApp.id}
+          />
+        );
+      })()}
 
       {/* Modal Novo Agendamento */}
       <Modal

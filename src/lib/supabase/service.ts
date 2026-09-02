@@ -5,8 +5,10 @@ import {
   Patient,
   Appointment,
   TherapySession,
+  SessionPrivateNotes,
   Goal,
   AssignedExercise,
+  ExerciseTemplate,
   DiaryEntry,
   MoodLog,
   PsychometricResult,
@@ -148,11 +150,26 @@ export const SupabaseService = {
   },
 
   // ==========================================
-  // PACIENTES
+  // PACIENTES (MULTI-TENANT REAL POR PSICÓLOGO)
   // ==========================================
   async getPatients(psychologistId?: string): Promise<Patient[]> {
     if (!isSupabaseConfigured || !supabase) return [];
     try {
+      if (psychologistId) {
+        const { data, error } = await supabase
+          .from('psychologist_patient_relationships')
+          .select('patient:patients(*)')
+          .eq('psychologist_id', psychologistId)
+          .eq('status', 'active');
+
+        if (!error && data && data.length > 0) {
+          return data
+            .map((rel: any) => rel.patient)
+            .filter(Boolean)
+            .sort((a: Patient, b: Patient) => a.full_name.localeCompare(b.full_name));
+        }
+      }
+
       const { data, error } = await supabase
         .from('patients')
         .select('*')
@@ -169,7 +186,7 @@ export const SupabaseService = {
     }
   },
 
-  async insertPatient(patient: Omit<Patient, 'id' | 'created_at' | 'updated_at'>): Promise<Patient | null> {
+  async insertPatient(patient: Omit<Patient, 'id' | 'created_at' | 'updated_at'>, psychologistId?: string): Promise<Patient | null> {
     if (!isSupabaseConfigured || !supabase) return null;
     try {
       const payload: any = {
@@ -196,6 +213,19 @@ export const SupabaseService = {
         console.error('Erro ao inserir paciente no Supabase:', error.message);
         return null;
       }
+
+      // Vincular na tabela psychologist_patient_relationships para garantir isolamento
+      if (data && psychologistId) {
+        await supabase
+          .from('psychologist_patient_relationships')
+          .insert([{
+            psychologist_id: psychologistId,
+            patient_id: data.id,
+            status: 'active',
+            started_at: new Date().toISOString()
+          }]);
+      }
+
       return data;
     } catch (err) {
       console.error('Erro de rede:', err);
@@ -203,13 +233,50 @@ export const SupabaseService = {
     }
   },
 
+  async updatePatient(id: string, updates: Partial<Patient>): Promise<boolean> {
+    if (!isSupabaseConfigured || !supabase) return false;
+    try {
+      const { error } = await supabase
+        .from('patients')
+        .update({
+          ...updates,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', id);
+
+      return !error;
+    } catch (err) {
+      console.error('Erro ao atualizar paciente:', err);
+      return false;
+    }
+  },
+
+  async deletePatient(id: string): Promise<boolean> {
+    if (!isSupabaseConfigured || !supabase) return false;
+    try {
+      const { error } = await supabase
+        .from('patients')
+        .delete()
+        .eq('id', id);
+
+      return !error;
+    } catch (err) {
+      console.error('Erro ao deletar paciente:', err);
+      return false;
+    }
+  },
+
   // ==========================================
-  // SESSÕES CLÍNICAS
+  // SESSÕES CLÍNICAS & NOTAS PRIVADAS (CFP)
   // ==========================================
   async getSessions(psychologistId?: string, patientId?: string): Promise<TherapySession[]> {
     if (!isSupabaseConfigured || !supabase) return [];
     try {
-      let query = supabase.from('therapy_sessions').select('*').order('session_date', { ascending: false });
+      let query = supabase
+        .from('therapy_sessions')
+        .select('*, private_notes:session_private_notes(*)')
+        .order('session_date', { ascending: false });
+
       if (psychologistId) query = query.eq('psychologist_id', psychologistId);
       if (patientId) query = query.eq('patient_id', patientId);
 
@@ -218,19 +285,27 @@ export const SupabaseService = {
         console.warn('Erro ao buscar sessões:', error.message);
         return [];
       }
-      return data || [];
+
+      return (data || []).map((s: any) => ({
+        ...s,
+        private_notes: Array.isArray(s.private_notes) ? s.private_notes[0] : s.private_notes
+      }));
     } catch (err) {
       console.warn('Erro de conexão:', err);
       return [];
     }
   },
 
-  async insertSession(session: Omit<TherapySession, 'id' | 'created_at' | 'updated_at'>): Promise<TherapySession | null> {
+  async insertSession(
+    session: Omit<TherapySession, 'id' | 'created_at' | 'updated_at'>,
+    privateNotes?: Omit<SessionPrivateNotes, 'id' | 'session_id' | 'psychologist_id' | 'patient_id' | 'created_at' | 'updated_at'>
+  ): Promise<TherapySession | null> {
     if (!isSupabaseConfigured || !supabase) return null;
     try {
+      const { private_notes, ...cleanSession } = session as any;
       const { data, error } = await supabase
         .from('therapy_sessions')
-        .insert([session])
+        .insert([cleanSession])
         .select()
         .single();
 
@@ -238,10 +313,86 @@ export const SupabaseService = {
         console.error('Erro ao salvar sessão no Supabase:', error.message);
         return null;
       }
+
+      // Se houver notas privadas com sigilo absoluto (Resolução CFP)
+      if (data && privateNotes && (privateNotes.private_clinical_hypothesis || privateNotes.supervision_notes || privateNotes.risk_assessment_notes)) {
+        const { data: notesData } = await supabase
+          .from('session_private_notes')
+          .insert([{
+            session_id: data.id,
+            psychologist_id: data.psychologist_id,
+            patient_id: data.patient_id,
+            private_clinical_hypothesis: privateNotes.private_clinical_hypothesis || '',
+            supervision_notes: privateNotes.supervision_notes || null,
+            transference_countertransference_notes: privateNotes.transference_countertransference_notes || null,
+            risk_assessment_notes: privateNotes.risk_assessment_notes || null,
+          }])
+          .select()
+          .single();
+
+        return {
+          ...data,
+          private_notes: notesData || undefined
+        };
+      }
+
       return data;
     } catch (err) {
-      console.error('Erro de rede:', err);
+      console.error('Erro de rede ao salvar sessão:', err);
       return null;
+    }
+  },
+
+  async updateSession(
+    id: string,
+    updates: Partial<TherapySession>,
+    privateNotesUpdates?: Partial<SessionPrivateNotes>
+  ): Promise<boolean> {
+    if (!isSupabaseConfigured || !supabase) return false;
+    try {
+      const { private_notes, ...cleanUpdates } = updates as any;
+      const { error } = await supabase
+        .from('therapy_sessions')
+        .update({
+          ...cleanUpdates,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', id);
+
+      if (error) {
+        console.error('Erro ao atualizar sessão:', error.message);
+        return false;
+      }
+
+      if (privateNotesUpdates) {
+        await supabase
+          .from('session_private_notes')
+          .update({
+            ...privateNotesUpdates,
+            updated_at: new Date().toISOString()
+          })
+          .eq('session_id', id);
+      }
+
+      return true;
+    } catch (err) {
+      console.error('Erro de rede ao atualizar sessão:', err);
+      return false;
+    }
+  },
+
+  async deleteSession(id: string): Promise<boolean> {
+    if (!isSupabaseConfigured || !supabase) return false;
+    try {
+      const { error } = await supabase
+        .from('therapy_sessions')
+        .delete()
+        .eq('id', id);
+
+      return !error;
+    } catch (err) {
+      console.error('Erro ao excluir sessão:', err);
+      return false;
     }
   },
 
@@ -292,7 +443,10 @@ export const SupabaseService = {
     try {
       const { error } = await supabase
         .from('appointments')
-        .update(updates)
+        .update({
+          ...updates,
+          updated_at: new Date().toISOString()
+        })
         .eq('id', id);
 
       return !error;
@@ -302,19 +456,35 @@ export const SupabaseService = {
     }
   },
 
+  async deleteAppointment(id: string): Promise<boolean> {
+    if (!isSupabaseConfigured || !supabase) return false;
+    try {
+      const { error } = await supabase
+        .from('appointments')
+        .delete()
+        .eq('id', id);
+
+      return !error;
+    } catch (err) {
+      console.error('Erro ao deletar agendamento:', err);
+      return false;
+    }
+  },
+
   // ==========================================
   // OBJETIVOS TERAPÊUTICOS
   // ==========================================
-  async getGoals(patientId?: string): Promise<Goal[]> {
+  async getGoals(psychologistId?: string, patientId?: string): Promise<Goal[]> {
     if (!isSupabaseConfigured || !supabase) return [];
     try {
       let query = supabase.from('goals').select('*').order('created_at', { ascending: false });
+      if (psychologistId) query = query.eq('psychologist_id', psychologistId);
       if (patientId) query = query.eq('patient_id', patientId);
 
       const { data, error } = await query;
       if (error) return [];
       return data || [];
-    } catch (err) {
+    } catch {
       return [];
     }
   },
@@ -330,15 +500,33 @@ export const SupabaseService = {
     }
   },
 
+  async updateGoal(id: string, updates: Partial<Goal>): Promise<boolean> {
+    if (!isSupabaseConfigured || !supabase) return false;
+    try {
+      const { error } = await supabase
+        .from('goals')
+        .update({
+          ...updates,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', id);
+
+      return !error;
+    } catch {
+      return false;
+    }
+  },
+
   // ==========================================
-  // EXERCÍCIOS ATRIBUÍDOS
+  // EXERCÍCIOS, MODELOS E RESPOSTAS (RPD)
   // ==========================================
-  async getAssignedExercises(patientId?: string): Promise<AssignedExercise[]> {
+  async getExerciseTemplates(psychologistId?: string): Promise<ExerciseTemplate[]> {
     if (!isSupabaseConfigured || !supabase) return [];
     try {
-      let query = supabase.from('assigned_exercises').select('*').order('assigned_at', { ascending: false });
-      if (patientId) query = query.eq('patient_id', patientId);
-
+      let query = supabase.from('exercise_templates').select('*').order('created_at', { ascending: false });
+      if (psychologistId) {
+        query = query.or(`psychologist_id.eq.${psychologistId},is_public_library.eq.true`);
+      }
       const { data, error } = await query;
       if (error) return [];
       return data || [];
@@ -347,10 +535,10 @@ export const SupabaseService = {
     }
   },
 
-  async insertAssignedExercise(exercise: Omit<AssignedExercise, 'id' | 'created_at'>): Promise<AssignedExercise | null> {
+  async insertExerciseTemplate(template: Omit<ExerciseTemplate, 'id' | 'created_at'>): Promise<ExerciseTemplate | null> {
     if (!isSupabaseConfigured || !supabase) return null;
     try {
-      const { data, error } = await supabase.from('assigned_exercises').insert([exercise]).select().single();
+      const { data, error } = await supabase.from('exercise_templates').insert([template]).select().single();
       if (error) return null;
       return data;
     } catch {
@@ -358,18 +546,118 @@ export const SupabaseService = {
     }
   },
 
+  async getAssignedExercises(psychologistId?: string, patientId?: string): Promise<AssignedExercise[]> {
+    if (!isSupabaseConfigured || !supabase) return [];
+    try {
+      let query = supabase
+        .from('assigned_exercises')
+        .select('*, answer:exercise_answers(*), feedback:exercise_feedback(*)')
+        .order('assigned_at', { ascending: false });
+
+      if (psychologistId) query = query.eq('psychologist_id', psychologistId);
+      if (patientId) query = query.eq('patient_id', patientId);
+
+      const { data, error } = await query;
+      if (error) return [];
+
+      return (data || []).map((e: any) => ({
+        ...e,
+        answer: Array.isArray(e.answer) ? e.answer[0] : e.answer,
+        feedback: Array.isArray(e.feedback) ? e.feedback[0] : e.feedback,
+      }));
+    } catch {
+      return [];
+    }
+  },
+
+  async insertAssignedExercise(exercise: Omit<AssignedExercise, 'id' | 'created_at'>): Promise<AssignedExercise | null> {
+    if (!isSupabaseConfigured || !supabase) return null;
+    try {
+      const { template, answer, feedback, ...cleanPayload } = exercise as any;
+      const { data, error } = await supabase.from('assigned_exercises').insert([cleanPayload]).select().single();
+      if (error) {
+        console.error('Erro ao atribuir exercício:', error.message);
+        return null;
+      }
+      return data;
+    } catch (err) {
+      console.error('Erro de rede:', err);
+      return null;
+    }
+  },
+
+  async submitExerciseResponse(assignedExerciseId: string, patientId: string, responses: Record<string, any>, notes?: string): Promise<boolean> {
+    if (!isSupabaseConfigured || !supabase) return false;
+    try {
+      const { error: ansErr } = await supabase
+        .from('exercise_answers')
+        .insert([{
+          assigned_exercise_id: assignedExerciseId,
+          patient_id: patientId,
+          responses,
+          patient_notes: notes || null,
+          submitted_at: new Date().toISOString()
+        }]);
+
+      if (ansErr) {
+        console.error('Erro ao salvar resposta do exercício:', ansErr.message);
+        return false;
+      }
+
+      await supabase
+        .from('assigned_exercises')
+        .update({
+          status: 'completed',
+          completed_at: new Date().toISOString()
+        })
+        .eq('id', assignedExerciseId);
+
+      return true;
+    } catch (err) {
+      console.error('Erro de rede ao responder exercício:', err);
+      return false;
+    }
+  },
+
+  async insertExerciseFeedback(assignedExerciseId: string, psychologistId: string, feedbackText: string, clinicalObservations?: string): Promise<boolean> {
+    if (!isSupabaseConfigured || !supabase) return false;
+    try {
+      const { error: fbErr } = await supabase
+        .from('exercise_feedback')
+        .insert([{
+          assigned_exercise_id: assignedExerciseId,
+          psychologist_id: psychologistId,
+          feedback_text: feedbackText,
+          clinical_observations: clinicalObservations || null,
+          created_at: new Date().toISOString()
+        }]);
+
+      if (fbErr) return false;
+
+      await supabase
+        .from('assigned_exercises')
+        .update({
+          status: 'reviewed',
+          reviewed_at: new Date().toISOString()
+        })
+        .eq('id', assignedExerciseId);
+
+      return true;
+    } catch {
+      return false;
+    }
+  },
+
   // ==========================================
   // DIÁRIO & HUMOR
   // ==========================================
-  async getDiaryEntries(patientId: string): Promise<DiaryEntry[]> {
+  async getDiaryEntries(patientId?: string, psychologistId?: string): Promise<DiaryEntry[]> {
     if (!isSupabaseConfigured || !supabase) return [];
     try {
-      const { data, error } = await supabase
-        .from('diary_entries')
-        .select('*')
-        .eq('patient_id', patientId)
-        .order('entry_date', { ascending: false });
+      let query = supabase.from('diary_entries').select('*').order('entry_date', { ascending: false });
+      if (patientId) query = query.eq('patient_id', patientId);
 
+      const { data, error } = await query;
       if (error) return [];
       return data || [];
     } catch {
@@ -391,15 +679,39 @@ export const SupabaseService = {
     }
   },
 
-  async getMoodLogs(patientId: string): Promise<MoodLog[]> {
+  async updateDiaryEntry(id: string, updates: Partial<DiaryEntry>): Promise<boolean> {
+    if (!isSupabaseConfigured || !supabase) return false;
+    try {
+      const { error } = await supabase
+        .from('diary_entries')
+        .update({
+          ...updates,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', id);
+      return !error;
+    } catch {
+      return false;
+    }
+  },
+
+  async deleteDiaryEntry(id: string): Promise<boolean> {
+    if (!isSupabaseConfigured || !supabase) return false;
+    try {
+      const { error } = await supabase.from('diary_entries').delete().eq('id', id);
+      return !error;
+    } catch {
+      return false;
+    }
+  },
+
+  async getMoodLogs(patientId?: string): Promise<MoodLog[]> {
     if (!isSupabaseConfigured || !supabase) return [];
     try {
-      const { data, error } = await supabase
-        .from('mood_logs')
-        .select('*')
-        .eq('patient_id', patientId)
-        .order('logged_at', { ascending: false });
+      let query = supabase.from('mood_logs').select('*').order('logged_at', { ascending: false });
+      if (patientId) query = query.eq('patient_id', patientId);
 
+      const { data, error } = await query;
       if (error) return [];
       return data || [];
     } catch {
@@ -424,11 +736,12 @@ export const SupabaseService = {
   // ==========================================
   // ESCALAS PSICOMÉTRICAS
   // ==========================================
-  async getPsychometricResults(patientId?: string): Promise<PsychometricResult[]> {
+  async getPsychometricResults(patientId?: string, psychologistId?: string): Promise<PsychometricResult[]> {
     if (!isSupabaseConfigured || !supabase) return [];
     try {
       let query = supabase.from('psychometric_results').select('*').order('taken_at', { ascending: false });
       if (patientId) query = query.eq('patient_id', patientId);
+      if (psychologistId) query = query.eq('psychologist_id', psychologistId);
 
       const { data, error } = await query;
       if (error) return [];
@@ -449,6 +762,107 @@ export const SupabaseService = {
       return data;
     } catch {
       return null;
+    }
+  },
+
+  // ==========================================
+  // DIAGRAMAS COGNITIVOS & ÂNCORAS DE VOZ
+  // ==========================================
+  async getCognitiveDiagrams(patientId?: string, psychologistId?: string): Promise<CognitiveDiagram[]> {
+    if (!isSupabaseConfigured || !supabase) return [];
+    try {
+      let query = supabase.from('cognitive_diagrams').select('*').order('created_at', { ascending: false });
+      if (patientId) query = query.eq('patient_id', patientId);
+      if (psychologistId) query = query.eq('psychologist_id', psychologistId);
+
+      const { data, error } = await query;
+      if (error) return [];
+      return data || [];
+    } catch {
+      return [];
+    }
+  },
+
+  async insertCognitiveDiagram(diagram: Omit<CognitiveDiagram, 'id' | 'created_at'>): Promise<CognitiveDiagram | null> {
+    if (!isSupabaseConfigured || !supabase) return null;
+    try {
+      const { data, error } = await supabase.from('cognitive_diagrams').insert([{
+        patient_id: diagram.patient_id,
+        psychologist_id: diagram.psychologist_id,
+        situation: diagram.situation,
+        automatic_thoughts: diagram.automatic_thought,
+        emotions: Array.isArray(diagram.emotions) ? diagram.emotions.join(', ') : diagram.emotions,
+        bodily_sensations: diagram.physiological_reaction,
+        behaviors: diagram.behavior,
+        alternative_thought: diagram.alternative_thought,
+        suds_score: diagram.outcome_emotion_intensity || 0,
+        created_at: new Date().toISOString()
+      }]).select().single();
+
+      if (error) {
+        console.error('Erro ao salvar diagrama cognitivo:', error.message);
+        return null;
+      }
+      return data;
+    } catch {
+      return null;
+    }
+  },
+
+  async getVoiceAnchors(patientId?: string, psychologistId?: string): Promise<VoiceAnchor[]> {
+    if (!isSupabaseConfigured || !supabase) return [];
+    try {
+      let query = supabase.from('voice_anchors').select('*').order('created_at', { ascending: false });
+      if (patientId) query = query.eq('patient_id', patientId);
+      if (psychologistId) query = query.eq('psychologist_id', psychologistId);
+
+      const { data, error } = await query;
+      if (error) return [];
+      return data || [];
+    } catch {
+      return [];
+    }
+  },
+
+  async insertVoiceAnchor(anchor: Omit<VoiceAnchor, 'id' | 'created_at'>): Promise<VoiceAnchor | null> {
+    if (!isSupabaseConfigured || !supabase) return null;
+    try {
+      const { data, error } = await supabase.from('voice_anchors').insert([anchor]).select().single();
+      if (error) {
+        console.error('Erro ao salvar âncora de voz:', error.message);
+        return null;
+      }
+      return data;
+    } catch {
+      return null;
+    }
+  },
+
+  // ==========================================
+  // CONTRATOS & CONSENTIMENTOS LGPD
+  // ==========================================
+  async saveTherapeuticConsent(params: {
+    userId: string;
+    termsVersion: string;
+    details?: Record<string, any>;
+  }): Promise<boolean> {
+    if (!isSupabaseConfigured || !supabase) return false;
+    try {
+      const { error } = await supabase.from('consents').insert([{
+        user_id: params.userId,
+        consent_type: 'therapeutic_contract_lgpd',
+        terms_version: params.termsVersion,
+        granted: true,
+        granted_at: new Date().toISOString()
+      }]);
+
+      if (error) {
+        console.warn('Erro ao registrar consentimento no Supabase:', error.message);
+        return false;
+      }
+      return true;
+    } catch {
+      return false;
     }
   },
 

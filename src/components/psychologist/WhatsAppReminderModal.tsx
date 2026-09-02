@@ -26,6 +26,8 @@ interface WhatsAppReminderModalProps {
   sessionDate?: string;
   sessionTime?: string;
   psychologistName?: string;
+  sessionLink?: string;
+  appointmentId?: string;
 }
 
 export const WhatsAppReminderModal: React.FC<WhatsAppReminderModalProps> = ({
@@ -35,7 +37,9 @@ export const WhatsAppReminderModal: React.FC<WhatsAppReminderModalProps> = ({
   patientPhone = '(11) 98765-4321',
   sessionDate = '2026-08-31',
   sessionTime = '14:00',
-  psychologistName = 'Dra. Ana Martins'
+  psychologistName = 'Dra. Ana Martins',
+  sessionLink,
+  appointmentId
 }) => {
   const [templateType, setTemplateType] = useState<'24h' | '2h' | 'reschedule'>('24h');
   const [copied, setCopied] = useState(false);
@@ -44,11 +48,18 @@ export const WhatsAppReminderModal: React.FC<WhatsAppReminderModalProps> = ({
   const cleanPhone = patientPhone.replace(/\D/g, '');
   const fullInternationalPhone = cleanPhone.startsWith('55') ? cleanPhone : `55${cleanPhone}`;
 
-  const meetLink = `https://meet.google.com/psi-ana-${Date.now().toString().slice(-4)}`;
+  const meetLink = sessionLink || `https://meet.google.com/psi-${sessionDate.replace(/-/g, '')}`;
   
-  // Link de 1 clique para o paciente salvar no Google Agenda dele
-  const calStart = sessionDate.replace(/-/g, '') + 'T' + sessionTime.replace(':', '') + '00';
-  const googleCalLink = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(`Sessão de Psicoterapia — ${psychologistName}`)}&dates=${calStart}/${calStart}&details=${encodeURIComponent(`Sessão clínica com ${psychologistName} via PsiApp.`)}&sf=true`;
+  // Link de 1 clique para o paciente salvar no Google Agenda com data de início e término reais (+50 minutos)
+  const startDateTime = new Date(`${sessionDate}T${sessionTime}:00`);
+  const endDateTime = new Date(startDateTime.getTime() + 50 * 60 * 1000);
+  const toCalStr = (d: Date) => {
+    return isNaN(d.getTime()) 
+      ? sessionDate.replace(/-/g, '') + 'T' + sessionTime.replace(':', '') + '00Z'
+      : d.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+  };
+  const calDates = `${toCalStr(startDateTime)}/${toCalStr(endDateTime)}`;
+  const googleCalLink = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(`Sessão de Psicoterapia — ${psychologistName}`)}&dates=${calDates}&details=${encodeURIComponent(`Sessão clínica com ${psychologistName} via PsiApp.\nLink de Acesso: ${meetLink}`)}&location=${encodeURIComponent(meetLink)}&sf=true`;
 
   const messageTemplates = {
     '24h': `Olá, ${patientName}! 👋\n\nPassando para confirmar nossa sessão de psicoterapia amanhã, dia *${formatDate(sessionDate)}* às *${sessionTime}* com *${psychologistName}*.\n\n📅 *Salvar na sua Agenda do Google / Celular:*\n${googleCalLink}\n\nPor favor, responda com:\n1️⃣ *SIM*, confirmo minha presença!\n2️⃣ *REMARCAR* (caso precise de outro horário com antecedência).\n\nNos vemos amanhã! 🌿`,

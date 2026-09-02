@@ -102,128 +102,260 @@ ALTER TABLE therapy_sessions ADD COLUMN IF NOT EXISTS soap_objective TEXT;
 ALTER TABLE therapy_sessions ADD COLUMN IF NOT EXISTS soap_assessment TEXT;
 ALTER TABLE therapy_sessions ADD COLUMN IF NOT EXISTS soap_plan TEXT;
 
--- 6. Habilitar RLS em todas as novas tabelas
+-- 6. Habilitar RLS em todas as tabelas
 ALTER TABLE psychometric_results ENABLE ROW LEVEL SECURITY;
 ALTER TABLE cognitive_diagrams ENABLE ROW LEVEL SECURITY;
 ALTER TABLE voice_anchors ENABLE ROW LEVEL SECURITY;
 ALTER TABLE patient_invites ENABLE ROW LEVEL SECURITY;
-
--- Políticas de RLS Estritas (Segregação de Sigilo e Isolamento de Tenants)
-
--- 6.1 Escalas Psicométricas
-CREATE POLICY "Psychologists manage psychometric_results of their patients" 
-    ON psychometric_results FOR ALL TO authenticated 
-    USING (psychologist_id IN (SELECT id FROM psychologists WHERE profile_id IN (SELECT id FROM profiles WHERE user_id = auth.uid())))
-    WITH CHECK (psychologist_id IN (SELECT id FROM psychologists WHERE profile_id IN (SELECT id FROM profiles WHERE user_id = auth.uid())));
-
-CREATE POLICY "Patients view own psychometric_results" 
-    ON psychometric_results FOR SELECT TO authenticated 
-    USING (patient_id IN (SELECT id FROM patients WHERE linked_profile_id IN (SELECT id FROM profiles WHERE user_id = auth.uid())));
-
--- 6.2 Diagramas Cognitivos (TCC/ACT)
-CREATE POLICY "Psychologists manage cognitive_diagrams of their patients" 
-    ON cognitive_diagrams FOR ALL TO authenticated 
-    USING (psychologist_id IN (SELECT id FROM psychologists WHERE profile_id IN (SELECT id FROM profiles WHERE user_id = auth.uid())))
-    WITH CHECK (psychologist_id IN (SELECT id FROM psychologists WHERE profile_id IN (SELECT id FROM profiles WHERE user_id = auth.uid())));
-
-CREATE POLICY "Patients view own cognitive_diagrams" 
-    ON cognitive_diagrams FOR SELECT TO authenticated 
-    USING (patient_id IN (SELECT id FROM patients WHERE linked_profile_id IN (SELECT id FROM profiles WHERE user_id = auth.uid())));
-
--- 6.3 Âncoras de Voz
-CREATE POLICY "Psychologists manage voice_anchors" 
-    ON voice_anchors FOR ALL TO authenticated 
-    USING (psychologist_id IN (SELECT id FROM psychologists WHERE profile_id IN (SELECT id FROM profiles WHERE user_id = auth.uid())))
-    WITH CHECK (psychologist_id IN (SELECT id FROM psychologists WHERE profile_id IN (SELECT id FROM profiles WHERE user_id = auth.uid())));
-
-CREATE POLICY "Patients view assigned voice_anchors" 
-    ON voice_anchors FOR SELECT TO authenticated 
-    USING (patient_id IN (SELECT id FROM patients WHERE linked_profile_id IN (SELECT id FROM profiles WHERE user_id = auth.uid())));
-
--- 6.4 Convites de Pacientes
-CREATE POLICY "Psychologists manage own patient_invites" 
-    ON patient_invites FOR ALL TO authenticated 
-    USING (psychologist_id IN (SELECT id FROM psychologists WHERE profile_id IN (SELECT id FROM profiles WHERE user_id = auth.uid())))
-    WITH CHECK (psychologist_id IN (SELECT id FROM psychologists WHERE profile_id IN (SELECT id FROM profiles WHERE user_id = auth.uid())));
-
--- Permitir leitura pública/anônima de convite ativo por token
-CREATE POLICY "Allow public read on active patient_invites by token" 
-    ON patient_invites FOR SELECT TO anon 
-    USING (status = 'pending' AND expires_at > NOW());
-
--- 7. Trigger para criação automática de Profile após cadastro no Supabase Auth
-CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS TRIGGER AS $$
-DECLARE
-    v_role TEXT;
-    v_full_name TEXT;
-    v_crp_number TEXT;
-    v_crp_state TEXT;
-    v_approach TEXT;
-    v_new_profile_id UUID;
-BEGIN
-    v_role := COALESCE(NEW.raw_user_meta_data->>'role', 'psychologist');
-    v_full_name := COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.email);
-    v_crp_number := NEW.raw_user_meta_data->>'crp_number';
-    v_crp_state := COALESCE(NEW.raw_user_meta_data->>'crp_state', 'SP');
-    v_approach := COALESCE(NEW.raw_user_meta_data->>'approach', 'TCC (Terapia Cognitivo-Comportamental)');
-
-    -- Inserir Perfil
-    INSERT INTO public.profiles (user_id, full_name, display_name, email, role)
-    VALUES (NEW.id, v_full_name, split_part(v_full_name, ' ', 1), NEW.email, v_role)
-    RETURNING id INTO v_new_profile_id;
-
-    -- Se for Psicólogo, criar registro na tabela psychologists
-    IF v_role = 'psychologist' THEN
-        INSERT INTO public.psychologists (profile_id, crp_number, crp_state, approach, bio)
-        VALUES (
-            v_new_profile_id,
-            COALESCE(v_crp_number, '06/' || floor(random() * 90000 + 10000)::text),
-            v_crp_state,
-            v_approach,
-            'Psicóloga clínica dedicada ao desenvolvimento humano e saúde mental.'
-        );
-    END IF;
-
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- Trigger executado após INSERT em auth.users
-DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
-CREATE TRIGGER on_auth_user_created
-    AFTER INSERT ON auth.users
-    FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE psychologists ENABLE ROW LEVEL SECURITY;
+ALTER TABLE patients ENABLE ROW LEVEL SECURITY;
+ALTER TABLE appointments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE therapy_sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE session_private_notes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE assigned_exercises ENABLE ROW LEVEL SECURITY;
+ALTER TABLE exercise_answers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE exercise_feedback ENABLE ROW LEVEL SECURITY;
+ALTER TABLE exercise_templates ENABLE ROW LEVEL SECURITY;
+ALTER TABLE diary_entries ENABLE ROW LEVEL SECURITY;
+ALTER TABLE mood_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE goals ENABLE ROW LEVEL SECURITY;
+ALTER TABLE consents ENABLE ROW LEVEL SECURITY;
 
 -- ==============================================================================
--- 8. POLÍTICAS DE RLS PARA TABELAS CENTRAIS
+-- 7. POLÍTICAS DE RLS ESTRITAS (ISOLAMENTO MULTI-TENANT, SIGILO CFP E LGPD)
 -- ==============================================================================
 
+-- 7.1 Pacientes
 DROP POLICY IF EXISTS "Authenticated users access patients" ON patients;
-CREATE POLICY "Authenticated users access patients" ON patients FOR ALL TO authenticated USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Psychologists manage own patients" ON patients;
+DROP POLICY IF EXISTS "Patients view own profile" ON patients;
 
-DROP POLICY IF EXISTS "Authenticated users access psychologists" ON psychologists;
-CREATE POLICY "Authenticated users access psychologists" ON psychologists FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Psychologists manage own patients" ON patients
+    FOR ALL TO authenticated
+    USING (
+        id IN (
+            SELECT patient_id FROM psychologist_patient_relationships
+            WHERE psychologist_id IN (
+                SELECT id FROM psychologists WHERE profile_id IN (
+                    SELECT id FROM profiles WHERE user_id = auth.uid()
+                )
+            )
+        )
+        OR linked_profile_id IN (SELECT id FROM profiles WHERE user_id = auth.uid())
+    )
+    WITH CHECK (
+        id IN (
+            SELECT patient_id FROM psychologist_patient_relationships
+            WHERE psychologist_id IN (
+                SELECT id FROM psychologists WHERE profile_id IN (
+                    SELECT id FROM profiles WHERE user_id = auth.uid()
+                )
+            )
+        )
+        OR linked_profile_id IN (SELECT id FROM profiles WHERE user_id = auth.uid())
+        OR EXISTS (
+            SELECT 1 FROM psychologists WHERE profile_id IN (
+                SELECT id FROM profiles WHERE user_id = auth.uid()
+            )
+        )
+    );
 
-DROP POLICY IF EXISTS "Patients manage own mood_logs" ON mood_logs;
-DROP POLICY IF EXISTS "Psychologists view mood_logs" ON mood_logs;
-CREATE POLICY "Patients manage own mood_logs" ON mood_logs FOR ALL TO authenticated USING (true) WITH CHECK (true);
-CREATE POLICY "Psychologists view mood_logs" ON mood_logs FOR SELECT TO authenticated USING (true);
+-- 7.2 Agendamentos
+DROP POLICY IF EXISTS "Authenticated users manage appointments" ON appointments;
+DROP POLICY IF EXISTS "Psychologists manage own appointments" ON appointments;
+DROP POLICY IF EXISTS "Patients view own appointments" ON appointments;
 
+CREATE POLICY "Psychologists manage own appointments" ON appointments
+    FOR ALL TO authenticated
+    USING (
+        psychologist_id IN (
+            SELECT id FROM psychologists WHERE profile_id IN (
+                SELECT id FROM profiles WHERE user_id = auth.uid()
+            )
+        )
+    )
+    WITH CHECK (
+        psychologist_id IN (
+            SELECT id FROM psychologists WHERE profile_id IN (
+                SELECT id FROM profiles WHERE user_id = auth.uid()
+            )
+        )
+    );
+
+CREATE POLICY "Patients view own appointments" ON appointments
+    FOR SELECT TO authenticated
+    USING (
+        patient_id IN (
+            SELECT id FROM patients WHERE linked_profile_id IN (
+                SELECT id FROM profiles WHERE user_id = auth.uid()
+            )
+        )
+    );
+
+-- 7.3 Sessões Terapêuticas
+DROP POLICY IF EXISTS "Psychologists manage therapy_sessions" ON therapy_sessions;
+DROP POLICY IF EXISTS "Psychologists manage own therapy_sessions" ON therapy_sessions;
+DROP POLICY IF EXISTS "Patients view own therapy_sessions" ON therapy_sessions;
+
+CREATE POLICY "Psychologists manage own therapy_sessions" ON therapy_sessions
+    FOR ALL TO authenticated
+    USING (
+        psychologist_id IN (
+            SELECT id FROM psychologists WHERE profile_id IN (
+                SELECT id FROM profiles WHERE user_id = auth.uid()
+            )
+        )
+    )
+    WITH CHECK (
+        psychologist_id IN (
+            SELECT id FROM psychologists WHERE profile_id IN (
+                SELECT id FROM profiles WHERE user_id = auth.uid()
+            )
+        )
+    );
+
+-- 7.4 Notas Privadas da Sessão (Sigilo Absoluto - NUNCA visível ao paciente)
+DROP POLICY IF EXISTS "Psychologists view own private notes" ON session_private_notes;
+CREATE POLICY "Psychologists manage own private notes" ON session_private_notes
+    FOR ALL TO authenticated
+    USING (
+        psychologist_id IN (
+            SELECT id FROM psychologists WHERE profile_id IN (
+                SELECT id FROM profiles WHERE user_id = auth.uid()
+            )
+        )
+    )
+    WITH CHECK (
+        psychologist_id IN (
+            SELECT id FROM psychologists WHERE profile_id IN (
+                SELECT id FROM profiles WHERE user_id = auth.uid()
+            )
+        )
+    );
+
+-- 7.5 Exercícios Atribuídos e Respostas
+DROP POLICY IF EXISTS "Authenticated users manage assigned_exercises" ON assigned_exercises;
+CREATE POLICY "Psychologists and patients manage assigned_exercises" ON assigned_exercises
+    FOR ALL TO authenticated
+    USING (
+        psychologist_id IN (
+            SELECT id FROM psychologists WHERE profile_id IN (
+                SELECT id FROM profiles WHERE user_id = auth.uid()
+            )
+        )
+        OR patient_id IN (
+            SELECT id FROM patients WHERE linked_profile_id IN (
+                SELECT id FROM profiles WHERE user_id = auth.uid()
+            )
+        )
+    )
+    WITH CHECK (
+        psychologist_id IN (
+            SELECT id FROM psychologists WHERE profile_id IN (
+                SELECT id FROM profiles WHERE user_id = auth.uid()
+            )
+        )
+        OR patient_id IN (
+            SELECT id FROM patients WHERE linked_profile_id IN (
+                SELECT id FROM profiles WHERE user_id = auth.uid()
+            )
+        )
+    );
+
+-- 7.6 Diário Emocional (Apenas compartilhado é visível ao psicólogo)
 DROP POLICY IF EXISTS "Patients manage own diary_entries" ON diary_entries;
 DROP POLICY IF EXISTS "Psychologist view shared diary entries only" ON diary_entries;
-CREATE POLICY "Patients manage own diary_entries" ON diary_entries FOR ALL TO authenticated USING (true) WITH CHECK (true);
-CREATE POLICY "Psychologist view shared diary entries only" ON diary_entries FOR SELECT TO authenticated USING (is_shared_with_psychologist = TRUE);
 
-DROP POLICY IF EXISTS "Authenticated users manage appointments" ON appointments;
-CREATE POLICY "Authenticated users manage appointments" ON appointments FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Patients manage own diary_entries" ON diary_entries
+    FOR ALL TO authenticated
+    USING (
+        patient_id IN (
+            SELECT id FROM patients WHERE linked_profile_id IN (
+                SELECT id FROM profiles WHERE user_id = auth.uid()
+            )
+        )
+    )
+    WITH CHECK (
+        patient_id IN (
+            SELECT id FROM patients WHERE linked_profile_id IN (
+                SELECT id FROM profiles WHERE user_id = auth.uid()
+            )
+        )
+    );
 
-DROP POLICY IF EXISTS "Psychologists manage therapy_sessions" ON therapy_sessions;
-CREATE POLICY "Psychologists manage therapy_sessions" ON therapy_sessions FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Psychologists view shared diary_entries" ON diary_entries
+    FOR SELECT TO authenticated
+    USING (
+        is_shared_with_psychologist = TRUE
+        AND patient_id IN (
+            SELECT patient_id FROM psychologist_patient_relationships
+            WHERE psychologist_id IN (
+                SELECT id FROM psychologists WHERE profile_id IN (
+                    SELECT id FROM profiles WHERE user_id = auth.uid()
+                )
+            )
+        )
+    );
 
-DROP POLICY IF EXISTS "Authenticated users manage assigned_exercises" ON assigned_exercises;
-CREATE POLICY "Authenticated users manage assigned_exercises" ON assigned_exercises FOR ALL TO authenticated USING (true) WITH CHECK (true);
+-- 7.7 Termômetro de Humor
+DROP POLICY IF EXISTS "Patients manage own mood_logs" ON mood_logs;
+DROP POLICY IF EXISTS "Psychologists view mood_logs" ON mood_logs;
 
+CREATE POLICY "Patients manage own mood_logs" ON mood_logs
+    FOR ALL TO authenticated
+    USING (
+        patient_id IN (
+            SELECT id FROM patients WHERE linked_profile_id IN (
+                SELECT id FROM profiles WHERE user_id = auth.uid()
+            )
+        )
+    )
+    WITH CHECK (
+        patient_id IN (
+            SELECT id FROM patients WHERE linked_profile_id IN (
+                SELECT id FROM profiles WHERE user_id = auth.uid()
+            )
+        )
+    );
+
+CREATE POLICY "Psychologists view patient mood_logs" ON mood_logs
+    FOR SELECT TO authenticated
+    USING (
+        patient_id IN (
+            SELECT patient_id FROM psychologist_patient_relationships
+            WHERE psychologist_id IN (
+                SELECT id FROM psychologists WHERE profile_id IN (
+                    SELECT id FROM profiles WHERE user_id = auth.uid()
+                )
+            )
+        )
+    );
+
+-- 7.8 Objetivos Terapêuticos
 DROP POLICY IF EXISTS "Authenticated users manage goals" ON goals;
-CREATE POLICY "Authenticated users manage goals" ON goals FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Psychologists and patients manage goals" ON goals
+    FOR ALL TO authenticated
+    USING (
+        psychologist_id IN (
+            SELECT id FROM psychologists WHERE profile_id IN (
+                SELECT id FROM profiles WHERE user_id = auth.uid()
+            )
+        )
+        OR (
+            visible_to_patient = TRUE
+            AND patient_id IN (
+                SELECT id FROM patients WHERE linked_profile_id IN (
+                    SELECT id FROM profiles WHERE user_id = auth.uid()
+                )
+            )
+        )
+    )
+    WITH CHECK (
+        psychologist_id IN (
+            SELECT id FROM psychologists WHERE profile_id IN (
+                SELECT id FROM profiles WHERE user_id = auth.uid()
+            )
+        )
+    );
 

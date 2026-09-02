@@ -15,6 +15,8 @@ import {
   Calendar
 } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
+import { usePsi } from '@/lib/store/psi-context';
+import { SupabaseService } from '@/lib/supabase/service';
 
 interface TherapeuticContractModalProps {
   isOpen: boolean;
@@ -29,6 +31,7 @@ export const TherapeuticContractModal: React.FC<TherapeuticContractModalProps> =
   patientName = 'Mariana Costa',
   psychologistName = 'Dra. Ana Martins (CRP 06/142859)'
 }) => {
+  const { authUser, isLiveProduction, addNotification } = usePsi();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [hasSignature, setHasSignature] = useState(false);
@@ -48,7 +51,11 @@ export const TherapeuticContractModal: React.FC<TherapeuticContractModalProps> =
 
     ctx.beginPath();
     ctx.moveTo(clientX - rect.left, clientY - rect.top);
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = '#0f766e';
     setIsDrawing(true);
+    setHasSignature(true);
   };
 
   const draw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
@@ -63,11 +70,7 @@ export const TherapeuticContractModal: React.FC<TherapeuticContractModalProps> =
     const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
 
     ctx.lineTo(clientX - rect.left, clientY - rect.top);
-    ctx.strokeStyle = '#1E293B';
-    ctx.lineWidth = 2.5;
-    ctx.lineCap = 'round';
     ctx.stroke();
-    setHasSignature(true);
   };
 
   const stopDrawing = () => {
@@ -103,7 +106,22 @@ export const TherapeuticContractModal: React.FC<TherapeuticContractModalProps> =
       setSignedHash(realSha256);
       setSuccess(true);
 
-      // Persistir contrato assinado localmente
+      // Persistir contrato e consentimento no Supabase
+      if (isLiveProduction && authUser?.id) {
+        SupabaseService.saveTherapeuticConsent({
+          userId: authUser.id,
+          termsVersion: 'CFP-LGPD-2026.1',
+          details: {
+            patientName,
+            psychologistName,
+            sessionPrice,
+            hash: realSha256,
+            signedAt: now
+          }
+        });
+      }
+
+      // Fallback de persistência offline
       if (typeof window !== 'undefined') {
         localStorage.setItem(`psiapp_contract_${patientName.replace(/\s+/g, '_')}`, JSON.stringify({
           signedDate: now,
@@ -113,6 +131,14 @@ export const TherapeuticContractModal: React.FC<TherapeuticContractModalProps> =
           price: sessionPrice
         }));
       }
+
+      addNotification({
+        recipient_role: 'psychologist',
+        title: 'Contrato Terapêutico Assinado',
+        message: `O termo de consentimento e contrato com ${patientName} foi autenticado com sucesso via hash criptográfico.`,
+        type: 'feedback_received',
+        read: false
+      });
 
       setTimeout(() => {
         setSuccess(false);
