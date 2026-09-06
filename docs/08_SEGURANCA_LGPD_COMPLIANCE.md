@@ -209,6 +209,31 @@ Nenhum conteúdo clínico deve ser enviado a modelo externo sem:
 - [ ] Pentest
 - [ ] Backup + teste de restore
 - [ ] MFA
-- [ ] RLS testada
-- [ ] Logs sanitizados
-- [ ] Monitoramento
+## 15. Controles Técnicos Efetivamente Implementados
+
+### 15.1. Eliminação de Políticas RLS Permissivas & Isolamento Multi-Tenant
+- Foram banidas todas as cláusulas `FOR ALL TO authenticated USING (true)` em tabelas clínicas (`patients`, `appointments`, `therapy_sessions`, `assigned_exercises`).
+- Cada operação de leitura ou escrita agora exige a verificação em banco da relação entre o psicólogo (`profiles.user_id = auth.uid()`) e o paciente na tabela `psychologist_patient_relationships`.
+
+### 15.2. Sigilo Profissional Absoluto (Resoluções CFP 001/2009 e 004/2020)
+- Criação e aplicação de RLS dedicada na tabela `session_private_notes`: anotações de supervisão, hipóteses diagnósticas e reflexões contratransferenciais são protegidas por política exclusiva do psicólogo, sendo tecnicamente inacessíveis pelo paciente mesmo com token autenticado.
+- Diário emocional do paciente (`diary_entries`): nasce com `is_shared_with_psychologist = FALSE` por padrão (*privacy by default*), sendo liberado para visualização do terapeuta apenas mediante ato voluntário do titular.
+
+### 15.3. Contrato Terapêutico & Consentimento LGPD com Hash Criptográfico
+- O modal `TherapeuticContractModal.tsx` captura a assinatura digital do paciente em Canvas HTML5 e gera um hash **SHA-256** irretratável via Web Crypto API nativa (`window.crypto.subtle`).
+- O hash, data/hora, versão dos termos (`CFP-LGPD-2026.1`) e dados das partes são persistidos na tabela `consents` do Supabase para conformidade probatória perante auditorias da ANPD e conselhos regionais.
+
+### 15.4. Proteção de Credenciais OAuth & Cookies Seguros
+- No fluxo do Google Calendar OAuth (`/api/calendar/google/callback`), os tokens são armazenados com flags de segurança `HttpOnly`, `SameSite=Lax` e `Secure` em produção, prevenindo ataques XSS e vazamento de tokens no frontend.
+
+## 16. Checklist de Produção Homologado
+
+- [x] RLS restritiva testada e ativa no Supabase (19 tabelas)
+- [x] Segregação de anotações privativas de supervisão
+- [x] Termo de consentimento digital com assinatura e hash SHA-256
+- [x] Isolamento de dados de saúde mental (Art. 11 LGPD)
+- [x] Storage Buckets criados com políticas de acesso (`avatars`, `voice-anchors`, `documents`)
+- [x] Build de produção compilado com zero erros (`npm run build` - Exit Code 0)
+- [x] Repositório sincronizado na branch `main` pronta para deploy Vercel
+- [ ] Configuração do domínio final e apontamento DNS SSL/HTTPS
+- [ ] Revisão do DPA (Data Processing Agreement) com a Vercel e Supabase

@@ -1,294 +1,218 @@
-# 06 — Banco de Dados
+# 06 — Banco de Dados (Schema de Produção Supabase)
 
-## Convenções
+## Convenções Arquiteturais
 
-- PK: `id uuid`
-- datas: `timestamptz`
-- soft delete onde necessário: `deleted_at`
-- auditoria: `created_at`, `updated_at`, `created_by`
-- tenant: `organization_id`
+- **Chave Primária:** `id UUID DEFAULT uuid_generate_v4()`
+- **Datas:** `TIMESTAMPTZ NOT NULL DEFAULT NOW()`
+- **Multi-Tenant:** Isolamento relacional por psicólogo e paciente via `psychologist_patient_relationships` e `profiles` vinculados a `auth.uid()`.
+- **Sigilo Profissional:** Tabelas segregadas para registros compartilháveis vs. anotações privativas de supervisão (`session_private_notes`).
 
-## Tabelas
+---
 
-### `profiles`
-- id
-- full_name
-- display_name
-- avatar_path
-- phone
-- created_at
-- updated_at
+## Tabelas em Produção (19 Tabelas Homologadas)
 
-### `organizations`
-- id
-- name
-- type
-- owner_user_id
-- created_at
+### 1. `profiles`
+- `id` (UUID, PK)
+- `user_id` (UUID, UNIQUE) — Referência ao `auth.users(id)` do Supabase Auth
+- `role` (TEXT) — `CHECK (role IN ('psychologist', 'patient', 'manager', 'superadmin', 'admin', 'supervisor'))`
+- `full_name` (TEXT)
+- `display_name` (TEXT)
+- `email` (TEXT)
+- `phone` (TEXT)
+- `avatar_url` (TEXT)
+- `created_at`, `updated_at` (TIMESTAMPTZ)
 
-### `organization_members`
-- id
-- organization_id
-- user_id
-- role
-- status
+### 2. `psychologists`
+- `id` (UUID, PK)
+- `profile_id` (UUID, FK -> `profiles.id`)
+- `crp_number` (TEXT) — Número do registro no CRP
+- `crp_state` (TEXT) — UF do conselho regional (ex: 'SP', 'RJ')
+- `approach` (TEXT) — Linha teórica (TCC, ACT, Psicanálise, Humanismo, etc.)
+- `specialties` (TEXT[]) — Array de áreas de atuação
+- `session_default_price` (NUMERIC) — Valor base de consulta
+- `session_default_duration_minutes` (INT) — Duração padrão (ex: 50 minutos)
+- `e_psi_verified` (BOOLEAN) — Validação de cadastro e-Psi para teleconsulta
 
-### `psychologists`
-- id
-- user_id
-- organization_id
-- crp_number
-- crp_state
-- bio
-- status
+### 3. `patients`
+- `id` (UUID, PK)
+- `profile_id` (UUID, FK -> `profiles.id`, NULLABLE)
+- `full_name` (TEXT)
+- `social_name` (TEXT, NULLABLE)
+- `birth_date` (DATE / TEXT)
+- `gender` (TEXT)
+- `email` (TEXT)
+- `phone` (TEXT)
+- `emergency_contact_name`, `emergency_contact_phone` (TEXT)
+- `clinical_notes_overview` (TEXT)
+- `status` (TEXT) — `'active'`, `'inactive'`, `'archived'`
+- `started_at` (TIMESTAMPTZ)
 
-### `patients`
-- id
-- organization_id
-- linked_user_id nullable
-- full_name
-- social_name nullable
-- birth_date
-- email
-- phone
-- status
-- started_at
-- ended_at
+### 4. `psychologist_patient_relationships`
+- `id` (UUID, PK)
+- `psychologist_id` (UUID, FK -> `psychologists.id`)
+- `patient_id` (UUID, FK -> `patients.id`)
+- `status` (TEXT) — `'active'`, `'transferred'`, `'discharged'`
+- `created_at` (TIMESTAMPTZ)
 
-### `psychologist_patient_relationships`
-- id
-- organization_id
-- psychologist_id
-- patient_id
-- status
-- started_at
-- ended_at
+### 5. `appointments`
+- `id` (UUID, PK)
+- `psychologist_id` (UUID, FK -> `psychologists.id`)
+- `patient_id` (UUID, FK -> `patients.id`)
+- `starts_at`, `ends_at` (TIMESTAMPTZ)
+- `modality` (TEXT) — `'in_person'`, `'online'`
+- `location_or_link` (TEXT) — Link da teleconsulta (Google Meet / WebRTC) ou sala presencial
+- `status` (TEXT) — `'scheduled'`, `'confirmed'`, `'completed'`, `'canceled'`, `'no_show'`
+- `price` (NUMERIC) — Honorário cobrado
+- `payment_status` (TEXT) — `'pending'`, `'paid_pix'`, `'paid_credit'`, `'paid_cash'`, `'paid_invoice'`, `'exempt'`
+- `receipt_number` (TEXT) — Número do recibo de prestação de serviços psicológicos
+- `paid_at` (TIMESTAMPTZ)
+- `cancellation_reason`, `notes` (TEXT)
 
-### `appointments`
-- id
-- organization_id
-- psychologist_id
-- patient_id
-- starts_at
-- ends_at
-- modality
-- location_or_link
-- status
-- cancellation_reason
-- administrative_notes
+### 6. `therapy_sessions` (Prontuário & Evolução)
+- `id` (UUID, PK)
+- `appointment_id` (UUID, FK -> `appointments.id`, NULLABLE)
+- `psychologist_id` (UUID, FK -> `psychologists.id`)
+- `patient_id` (UUID, FK -> `patients.id`)
+- `session_date` (TIMESTAMPTZ)
+- `duration_minutes` (INT)
+- `summary` (TEXT)
+- `techniques_used` (TEXT[])
+- `homework_assigned` (TEXT)
+- `status` (TEXT) — `'draft'`, `'finalized'`
+- `soap_subjective`, `soap_objective`, `soap_assessment`, `soap_plan` (TEXT) — Formato SOAP
 
-### `therapy_sessions`
-- id
-- organization_id
-- appointment_id
-- psychologist_id
-- patient_id
-- session_date
-- duration_minutes
-- status
+### 7. `session_private_notes` (Sigilo Estrito CFP)
+- `id` (UUID, PK)
+- `session_id` (UUID, FK -> `therapy_sessions.id`, ON DELETE CASCADE)
+- `psychologist_id` (UUID, FK -> `psychologists.id`)
+- `patient_id` (UUID, FK -> `patients.id`)
+- `private_clinical_hypothesis` (TEXT)
+- `supervision_notes` (TEXT) — Anotações reservadas de supervisão clínica
+- `transference_countertransference_notes` (TEXT) — Dinâmica contratransferencial
+- `risk_assessment_notes` (TEXT) — Avaliação sigilosa de risco
 
-### `clinical_records`
-- id
-- organization_id
-- session_id nullable
-- patient_id
-- psychologist_id
-- demand_summary
-- objectives_summary
-- evolution_summary
-- procedures_summary
-- referrals_summary
-- plan_summary
-- version
-- locked_at nullable
+### 8. `psychometric_results`
+- `id` (UUID, PK)
+- `patient_id` (UUID, FK -> `patients.id`)
+- `psychologist_id` (UUID, FK -> `psychologists.id`)
+- `scale_id` (TEXT) — `'phq9'`, `'gad7'`, etc.
+- `scale_name` (TEXT)
+- `total_score` (INT)
+- `severity_level` (TEXT) — Mínima, Leve, Moderada, Grave
+- `risk_flag` (BOOLEAN) — Alerta de risco ético/emergência
+- `answers` (JSONB)
+- `clinical_interpretation` (TEXT)
+- `taken_at` (TIMESTAMPTZ)
 
-### `restricted_records`
-- id
-- organization_id
-- session_id nullable
-- patient_id
-- psychologist_id
-- content
-- classification
-- version
+### 9. `cognitive_diagrams` (TCC / ACT)
+- `id` (UUID, PK)
+- `patient_id` (UUID, FK -> `patients.id`)
+- `psychologist_id` (UUID, FK -> `psychologists.id`)
+- `situation`, `automatic_thoughts`, `emotions`, `bodily_sensations`, `behaviors`, `alternative_thought` (TEXT)
+- `suds_score` (INT) — Escala de Desconforto Subjetivo (0-10)
 
-### `record_versions`
-- id
-- record_type
-- record_id
-- version
-- snapshot_json
-- changed_by
-- changed_at
-- reason
+### 10. `voice_anchors`
+- `id` (UUID, PK)
+- `patient_id` (UUID, FK -> `patients.id`)
+- `psychologist_id` (UUID, FK -> `psychologists.id`)
+- `title`, `category`, `audio_url`, `instruction`, `transcript` (TEXT)
+- `duration_seconds` (INT)
 
-### `goals`
-- id
-- organization_id
-- patient_id
-- psychologist_id
-- title
-- description
-- status
-- progress
-- visible_to_patient
-- starts_at
-- target_at
+### 11. `patient_invites`
+- `id` (UUID, PK)
+- `psychologist_id` (UUID, FK -> `psychologists.id`)
+- `token` (TEXT, UNIQUE)
+- `patient_name`, `patient_email`, `patient_phone` (TEXT)
+- `status` (TEXT) — `'pending'`, `'accepted'`, `'expired'`
+- `expires_at` (TIMESTAMPTZ)
 
-### `exercise_templates`
-- id
-- organization_id nullable
-- owner_psychologist_id nullable
-- title
-- description
-- category
-- schema_json
-- visibility
-- active
+### 12. `exercise_templates` (Biblioteca Clínica)
+- `id` (UUID, PK)
+- `psychologist_id` (UUID, NULLABLE)
+- `title`, `description`, `instructions`, `category` (TEXT)
+- `schema_fields` (JSONB)
+- `is_public_library` (BOOLEAN)
 
-### `exercise_assignments`
-- id
-- organization_id
-- exercise_template_id
-- psychologist_id
-- patient_id
-- assigned_at
-- due_at
-- status
-- instructions
+### 13. `assigned_exercises`
+- `id` (UUID, PK)
+- `template_id` (UUID, FK -> `exercise_templates.id`, NULLABLE)
+- `psychologist_id` (UUID)
+- `patient_id` (UUID)
+- `title`, `instructions` (TEXT)
+- `schema_fields` (JSONB)
+- `due_date` (TIMESTAMPTZ, NULLABLE)
+- `status` (TEXT) — `'pending'`, `'completed'`, `'reviewed'`
+- `assigned_at`, `completed_at`, `reviewed_at` (TIMESTAMPTZ)
 
-### `exercise_responses`
-- id
-- assignment_id
-- patient_id
-- response_json
-- status
-- started_at
-- submitted_at
-- reviewed_at
+### 14. `exercise_answers`
+- `id` (UUID, PK)
+- `assigned_exercise_id` (UUID, FK -> `assigned_exercises.id`)
+- `patient_id` (UUID)
+- `responses` (JSONB)
+- `patient_notes` (TEXT)
+- `submitted_at` (TIMESTAMPTZ)
 
-### `exercise_feedback`
-- id
-- assignment_id
-- psychologist_id
-- feedback
-- visible_to_patient
-- created_at
+### 15. `exercise_feedback`
+- `id` (UUID, PK)
+- `assigned_exercise_id` (UUID, FK -> `assigned_exercises.id`)
+- `psychologist_id` (UUID)
+- `feedback_text`, `clinical_observations` (TEXT)
 
-### `diary_entries`
-- id
-- patient_id
-- organization_id
-- title
-- content
-- emotion
-- intensity
-- visibility
-- entry_at
-- created_at
-- updated_at
+### 16. `diary_entries`
+- `id` (UUID, PK)
+- `patient_id` (UUID)
+- `title`, `content`, `primary_emotion` (TEXT)
+- `intensity` (INT)
+- `is_shared_with_psychologist` (BOOLEAN DEFAULT FALSE) — **Privacy by default**
+- `entry_date` (TIMESTAMPTZ)
 
-### `mood_logs`
-- id
-- patient_id
-- organization_id
-- mood_score
-- intensity
-- emotions_json
-- note
-- visibility
-- logged_at
+### 17. `mood_logs`
+- `id` (UUID, PK)
+- `patient_id` (UUID)
+- `score` (INT) — 1 a 5
+- `intensity` (INT) — 0 a 10
+- `primary_feeling` (TEXT)
+- `tags` (TEXT[])
+- `note` (TEXT)
+- `logged_at` (TIMESTAMPTZ)
 
-### `content_items`
-- id
-- organization_id
-- owner_psychologist_id
-- title
-- description
-- type
-- url_or_path
-- category
-- active
+### 18. `consents` (Auditoria & Termos LGPD)
+- `id` (UUID, PK)
+- `user_id` (UUID)
+- `terms_version` (TEXT) — Ex: `'CFP-LGPD-2026.1'`
+- `accepted_at` (TIMESTAMPTZ)
+- `details` (JSONB) — Hash SHA-256, preço, partes e payload assinado
 
-### `content_assignments`
-- id
-- content_item_id
-- patient_id
-- psychologist_id
-- assigned_at
-- opened_at
-- completed_at
+### 19. `clinics`
+- `id` (UUID, PK)
+- `name`, `trade_name`, `document_cnpj`, `phone`, `email`, `address`, `plan_tier` (TEXT)
+- `manager_profile_id` (UUID, FK -> `profiles.id`)
 
-### `consents`
-- id
-- user_id
-- consent_type
-- document_version
-- granted
-- granted_at
-- revoked_at
-- ip_hash
-- user_agent_hash
+---
 
-### `notifications`
-- id
-- user_id
-- type
-- channel
-- payload_safe_json
-- scheduled_at
-- sent_at
-- status
+## Storage Buckets (Supabase Storage)
 
-### `audit_logs`
-- id
-- actor_user_id
-- organization_id
-- action
-- resource_type
-- resource_id
-- metadata_json
-- ip_hash
-- created_at
+- `avatars` (Público, 5MB): Fotos de perfil de profissionais e pacientes.
+- `voice-anchors` (Público, 20MB): Áudios terapêuticos e exercícios sonoros.
+- `documents` (Privado, 20MB): Contratos assinados, fichas de anamnese e documentos em PDF.
 
-## Índices essenciais
+---
 
-- appointments(psychologist_id, starts_at)
-- appointments(patient_id, starts_at)
-- clinical_records(patient_id, created_at)
-- restricted_records(patient_id, created_at)
-- diary_entries(patient_id, entry_at)
-- mood_logs(patient_id, logged_at)
-- exercise_assignments(patient_id, status, due_at)
-- audit_logs(resource_type, resource_id, created_at)
+## Triggers & Automações no Banco de Dados
 
-## Regras RLS exemplificadas
+### 1. `on_auth_user_auto_confirm` (Auto-Confirmação de E-mail)
+Executa `BEFORE INSERT` em `auth.users`, atribuindo `NEW.email_confirmed_at := NOW()`. Garante que qualquer novo psicólogo ou paciente cadastrado possa fazer login imediato sem travar na tela de verificação de e-mail.
 
-### Paciente
-Pode ler:
-- seu perfil;
-- agenda própria;
-- exercícios próprios;
-- objetivos visíveis;
-- diário próprio;
-- humor próprio;
-- conteúdo atribuído;
-- prontuário conforme política de produto validada.
+### 2. `handle_new_user` (Provisionamento Automático de Perfil)
+Executa `AFTER INSERT` em `auth.users`, criando automaticamente o registro correspondente em `public.profiles` e na tabela de especialidade (`psychologists` ou `patients`).
 
-Não pode ler:
-- `restricted_records`;
-- registros de outros pacientes;
-- logs internos;
-- dados de outros psicólogos.
+---
 
-### Psicólogo
-Pode ler dados do paciente se:
-- pertence à organização;
-- possui relacionamento;
-- recurso pertence ao paciente relacionado.
+## Políticas RLS (Row Level Security)
 
-## Migrações
-
-Toda alteração de schema deve ser versionada.
-
-Nunca editar produção manualmente sem migration.
+1. **Multi-Tenant Psicólogo-Paciente:**
+   A leitura e mutação de dados de pacientes (`patients`, `appointments`, `therapy_sessions`, `goals`) só são permitidas caso exista um registro ativo correspondente em `psychologist_patient_relationships` onde o psicólogo seja o usuário autenticado (`auth.uid()`) ou `patients.psychologist_id = current_psychologist.id`.
+2. **Sigilo Absoluto de Notas Privadas:**
+   A tabela `session_private_notes` possui política exclusiva para psicólogos. Pacientes não possuem permissão de SELECT nem UPDATE sobre este recurso.
+3. **Diário com Compartilhamento Condicional:**
+   O paciente lê e edita todos os seus próprios diários. O psicólogo só tem permissão de leitura sobre registros onde `is_shared_with_psychologist = TRUE`.

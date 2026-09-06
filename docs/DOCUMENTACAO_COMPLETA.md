@@ -1,7 +1,9 @@
-# DOCUMENTAÇÃO COMPLETA — PLATAFORMA DE ACOMPANHAMENTO PSICOLÓGICO
-**Versão 1.0 — 24/08/2026**
+# DOCUMENTAÇÃO COMPLETA — PSIAPP (GESTÃO CLÍNICA & ACOMPANHAMENTO TERAPÊUTICO)
+**Versão 1.2.0 — Setembro/2026**
 
-> Nome comercial a definir. Documento de produto, arquitetura e requisitos para desenvolvimento do MVP.
+> **Status:** Homologado em Produção Live (Vercel + Supabase)  
+> **Domínio:** `psiappgestao.vercel.app`  
+> Documento unificado de produto, arquitetura técnica, modelo relacional, contratos de API e conformidade regulatória (CFP / LGPD).
 
 
 

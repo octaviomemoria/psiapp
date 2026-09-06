@@ -16,118 +16,74 @@ Para operações sensíveis, preferir funções de backend.
 }
 ```
 
-## Endpoints conceituais
+## Endpoints Implementados (Next.js App Router)
 
-### Pacientes
+### Sincronização & Integração de Calendário
 
-`POST /patients`
-- cria paciente.
+#### `GET /api/calendar/feed`
+- **Descrição:** Retorna o feed de calendário no formato padrão mundial iCalendar (RFC 5545).
+- **Parâmetros de Query:** `?token=<user_id_or_psychologist_id>`
+- **Headers de Resposta:**
+  ```http
+  Content-Type: text/calendar; charset=utf-8
+  Cache-Control: no-cache, no-store, must-revalidate, max-age=0, s-maxage=0
+  Pragma: no-cache
+  Expires: 0
+  Content-Disposition: inline; filename="psiapp-agenda.ics"
+  ```
+- **Compatibilidade:** Nativo para iPhone / iPad / Mac via `webcal://`, Apple Watch, Google Agenda ("Do URL") e Microsoft Outlook.
 
-`GET /patients`
-- lista pacientes do profissional.
+#### `GET /api/calendar/google/auth`
+- **Descrição:** Inicia o fluxo de autorização OAuth 2.0 do Google Calendar.
+- **Redirecionamento:** `https://accounts.google.com/o/oauth2/v2/auth` com escopo `https://www.googleapis.com/auth/calendar.events` e `access_type=offline`.
 
-`GET /patients/:id`
-- retorna visão autorizada.
+#### `GET /api/calendar/google/callback`
+- **Descrição:** Recebe o `code` retornado pelo Google, troca por access/refresh tokens e grava em cookies seguros `HttpOnly` (`google_cal_token`).
 
-`PATCH /patients/:id`
-- altera dados permitidos.
+#### `POST /api/calendar/google/sync`
+- **Descrição:** Sincroniza consultas criadas ou alteradas no PsiApp diretamente na API oficial do Google Calendar.
+- **Payload:**
+  ```json
+  {
+    "appointmentId": "uuid",
+    "summary": "Sessão de Psicoterapia — Paciente",
+    "startDateTime": "2026-09-05T14:00:00Z",
+    "endDateTime": "2026-09-05T14:50:00Z",
+    "description": "Atendimento clínico via PsiApp",
+    "meetUrl": "https://meet.google.com/..."
+  }
+  ```
 
-### Agenda
+---
 
-`POST /appointments`
-`GET /appointments`
-`PATCH /appointments/:id`
-`POST /appointments/:id/cancel`
-`POST /appointments/:id/complete`
+## Contratos de Camada de Serviço (`SupabaseService`)
 
-### Sessões
+### Pacientes & Carteira Clínica
+- `getPatients(psychologistId?: string): Promise<Patient[]>` — Retorna pacientes vinculados ao psicólogo autenticado.
+- `insertPatient(patientData): Promise<Patient | null>` — Cadastra paciente com isolamento por `psychologist_id`.
+- `updatePatient(patientId, updates): Promise<boolean>` — Atualiza dados cadastrais.
 
-`POST /sessions`
-`GET /sessions/:id`
-`POST /sessions/:id/clinical-record`
-`POST /sessions/:id/restricted-record`
+### Sessões & Prontuário SOAP
+- `getSessions(psychologistId, patientId?): Promise<TherapySession[]>` — Busca histórico de sessões.
+- `insertSession(sessionData, privateNotes?): Promise<TherapySession | null>` — Salva prontuário SOAP e anotações privativas em transação atômica.
 
-### Exercícios
+### Exercícios & Engajamento
+- `assignExercise(assignment): Promise<AssignedExercise | null>` — Prescreve atividade com prazo.
+- `submitExerciseAnswer(answer): Promise<boolean>` — Salva respostas do paciente.
+- `reviewExercise(feedback): Promise<boolean>` — Psicólogo registra feedback clínico.
 
-`POST /exercise-templates`
-`GET /exercise-templates`
-`POST /exercise-assignments`
-`POST /exercise-assignments/:id/start`
-`POST /exercise-assignments/:id/submit`
-`POST /exercise-assignments/:id/review`
+### Diário & Humor
+- `getDiaryEntries(patientId, isPsychologist): Promise<DiaryEntry[]>` — Aplica filtro `is_shared_with_psychologist` se for profissional.
+- `logMood(moodData): Promise<MoodLog | null>` — Registra check-in emocional diário.
 
-### Diário
+### Escalas Psicométricas & Conceituação
+- `savePsychometricResult(result): Promise<boolean>` — Registra escore do PHQ-9 / GAD-7.
+- `saveCognitiveDiagram(diagram): Promise<boolean>` — Salva mapa de conceituação cognitiva.
+- `saveVoiceAnchor(anchor): Promise<boolean>` — Salva metadados e áudio da âncora de voz.
 
-`POST /diary`
-`GET /diary`
-`PATCH /diary/:id`
-`POST /diary/:id/share`
-`POST /diary/:id/unshare`
+---
 
-### Humor
+## Idempotência & Validação
 
-`POST /mood`
-`GET /mood?from=&to=`
-
-### Objetivos
-
-`POST /goals`
-`PATCH /goals/:id`
-`GET /goals`
-
-### Exportação
-
-`POST /exports`
-Retorna job.
-
-`GET /exports/:id`
-Retorna estado.
-
-## Idempotência
-
-Operações importantes devem aceitar `Idempotency-Key`.
-
-Exemplos:
-- convite;
-- envio de exercício;
-- notificação;
-- exportação.
-
-## Validação
-
-Usar schema validation no servidor.
-
-Sugestão:
-- Zod no frontend/backend;
-- constraints no PostgreSQL.
-
-## Paginação
-
-Cursor-based para:
-- histórico;
-- auditoria;
-- feed;
-- biblioteca.
-
-## Rate limiting
-
-Aplicar em:
-- login;
-- convite;
-- reset de senha;
-- exportação;
-- IA futura;
-- upload.
-
-## Erros
-
-- 400 validação;
-- 401 não autenticado;
-- 403 sem autorização;
-- 404 recurso inexistente ou ocultado;
-- 409 conflito;
-- 422 regra de negócio;
-- 429 limite;
-- 500 falha interna.
-
-Não retornar mensagens que revelem existência de paciente a usuário sem permissão.
+- Operações críticas aceitam validação por schemas TypeScript/Zod;
+- Tratamento resiliente de conexão offline com reconciliação automática de estado.
