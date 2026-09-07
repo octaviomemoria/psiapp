@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { PsiProvider } from '@/lib/store/psi-context';
+import { PwaRegistration } from '@/components/common/PwaRegistration';
 
 export const viewport: Viewport = {
   themeColor: '#0D9488',
@@ -33,7 +34,10 @@ export default function RootLayout({
   return (
     <html lang="pt-BR" className="h-full">
       <body className="h-full bg-[#F8FAFC]">
-        <PsiProvider>{children}</PsiProvider>
+        <PsiProvider>
+          {children}
+          <PwaRegistration />
+        </PsiProvider>
       </body>
     </html>
   );

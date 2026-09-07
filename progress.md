@@ -82,3 +82,18 @@
 - [x] Criação de suíte de testes automatizados `src/lib/store/financial.test.ts` e inclusão no pipeline de testes.
 - [x] Validação integral de testes: **25/25 testes aprovados** (100% de sucesso).
 - [x] Compilação final de produção com `next build`: **Exit Code 0** (23 rotas estáticas e 5 dinâmicas otimizadas).
+
+## Sessão: 07/09/2026 — Ativação e Deploy de Google Calendar OAuth 2.0 em Produção
+- [x] Cadastro das variáveis de ambiente de autenticação Google no `.env.local` (`GOOGLE_CLIENT_ID` e `GOOGLE_CLIENT_SECRET`).
+- [x] Injeção das credenciais criptografadas diretamente no cofre de variáveis de ambiente de Produção da Vercel (`octavio-memorias-projects/psiapp`) via Vercel CLI.
+- [x] Deploy automático de produção executado com sucesso (`vercel --prod`) gerando a URL canônica `https://psiappgestao.vercel.app`.
+- [x] Validação real do endpoint `/api/calendar/google/auth`: **HTTP 307 Temporary Redirect** ativo e redirecionando instantaneamente para a tela de consentimento oficial `https://accounts.google.com/o/oauth2/v2/auth`.
+
+## Sessão: 07/09/2026 — Tranche 4: PWA Offline-First, Observabilidade LGPD, White-Label & Exportador Contábil
+- [x] Implementação de Service Worker PWA (`public/sw.js`) com cache de ferramentas de emergência clínica (TIPP, Ancoragem, Respiração 4-7-8) e diário para suporte offline sem internet.
+- [x] Implementação do componente `PwaRegistration.tsx` com banner de status offline e sincronização reativa em `layout.tsx`.
+- [x] Criação do Logger Estruturado com Sanitização Ética LGPD (`src/lib/monitoring/logger.ts`) com remoção automática de CPFs, senhas, tokens e hipóteses diagnósticas antes de qualquer envio de telemetria.
+- [x] Criação do Módulo White-Label (`src/components/common/ClinicBrandingModal.tsx`) com personalização de marca da clínica, paleta de cores (Teal, Indigo, Emerald, Rose, Slate), CNPJ e endereço oficial nos relatórios.
+- [x] Criação do Exportador Financeiro para Contabilidade (`src/lib/billing/export-financial.ts`) no padrão brasileiro (UTF-8 BOM, ponto-e-vírgula e vírgula decimal) com demonstrativo de honorários brutos e líquidos.
+- [x] Validação de todas as suítes de testes unitários: **24/24 testes aprovados** com 100% de sucesso.
+- [x] Compilação de produção com `npm run build`: **Exit Code 0** (24 rotas geradas perfeitamente).

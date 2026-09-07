@@ -53,26 +53,47 @@ Definir o roadmap técnico, de produto, de conformidade legal (CFP/LGPD) e de in
   - Implementado `src/components/common/SaaSSubscriptionModal.tsx` com seleção de planos (*Autônomo*, *Clínica Pro*, *Enterprise*), faturamento mensal/anual com desconto de 20%, checkout transparente e simulação de ativação instantânea integrada ao Header.
 - [x] **Rota de Webhook Real de Pagamento (Asaas / Stripe / Pix)**:
   - Criado `src/app/api/billing/webhook/route.ts` com validação de token secreto, atualização automática de sessões para `paid_pix` no Supabase, registro na trilha de auditoria e processamento de renovação de assinaturas.
+- [x] **Exportação Contábil & Financeira para Excel/CSV**:
+  - Implementado `src/lib/billing/export-financial.ts` gerando arquivos compatíveis com o Excel no Brasil (UTF-8 BOM, ponto-e-vírgula e vírgula decimal) com demonstrativo de honorários brutos, taxas e valores líquidos.
+- [x] **Personalização White-Label da Clínica**:
+  - Implementado `src/components/common/ClinicBrandingModal.tsx` permitindo que a clínica defina nome institucional, slogan, paleta de cores (Teal, Indigo, Emerald, Rose, Slate), CNPJ, endereço e telefone para emissão automática em recibos e laudos.
 
 ### Fase 5: Experiência Mobile & PWA
 - [x] **PWA Manifest & Metadados Mobile Nativos**:
   - Criado `public/manifest.json` com configurações de standalone, orientações e cores de tema (`#0D9488`).
   - Criado `public/icon.svg` com ícone clínico de alta fidelidade.
   - Atualizado `src/app/layout.tsx` com metadados PWA, viewport dinâmico e Apple Web App tags.
+- [x] **Service Worker & Operação Offline-First**:
+  - Implementado `public/sw.js` com estratégia Network-First e cache de ferramentas de emergência emocional (TIPP, 5-4-3-2-1, Respiração 4-7-8) e diário para que o paciente nunca fique desassistido sem internet.
+  - Criado `src/components/common/PwaRegistration.tsx` com alerta automático de status offline e sincronização ao restabelecer rede.
 - [ ] **Empacotamento Nativo via Capacitor / Ionic**:
   - Biometria nativa e Push Notifications via Firebase Cloud Messaging.
 
 ### Fase 6: Engenharia de Confiabilidade, Testes & Observabilidade
+- [x] **Observabilidade Médica & Sanitização LGPD (Art. 11)**:
+  - Implementado `src/lib/monitoring/logger.ts` com mascaramento automático de CPFs, senhas, tokens de autenticação e hipóteses diagnósticas antes de qualquer envio de telemetria.
+- [x] **Despachante Multicanal de Notificações (WhatsApp + E-mail)**:
+  - Implementado `src/lib/notifications/dispatcher.ts` e endpoint seguro `src/app/api/notifications/send/route.ts` para lembretes de sessão 24h e 2h antes (com orientações de sigilo e sala criptografada).
+- [x] **Portabilidade de Prontuário Clínico & Dossiê Interoperável (LGPD Art. 18 / CFP 001/2009)**:
+  - Implementado `src/lib/export/medical-record-export.ts` com metadados jurídicos, respeito estrito à privacidade de diários não autorizados e modal `ExportRecordModal.tsx`.
+- [x] **Onboarding e Anamnese Digital Pública do Paciente**:
+  - Implementada rota pública `/onboarding/[token]` para preenchimento de ficha cadastral e consentimento informado LGPD.
+- [x] **Segurança da Conta & Gestão de Sessões Ativas**:
+  - Implementado `src/components/common/AccountSecurityModal.tsx` com visualização de dispositivos ativos, revogação de sessões e alteração de senha.
 - [x] **Suíte de Testes Automatizados & Script `npm test`**:
   - Módulo puro `src/lib/utils/psychometrics.ts` (PHQ-9 e GAD-7) com suíte unitária `src/lib/utils/psychometrics.test.ts` (7/7 aprovados).
   - Módulo puro `src/lib/auth/two-factor.ts` (RFC 6238 TOTP) com suíte unitária `src/lib/auth/two-factor.test.ts` (7/7 aprovados).
   - Módulo puro `src/lib/crypto/document-verifier.ts` (SHA-256) com suíte unitária `src/lib/crypto/document-verifier.test.ts` (3/3 aprovados).
-  - Total: **17 testes unitários automatizados com 100% de sucesso**.
+  - Módulo puro `src/lib/monitoring/logger.ts` (Sanitização LGPD) com suíte unitária `src/lib/monitoring/logger.test.ts` (4/4 aprovados).
+  - Módulo puro `src/lib/billing/export-financial.ts` (Exportador CSV Excel) com suíte unitária `src/lib/billing/export-financial.test.ts` (3/3 aprovados).
+  - Módulo puro `src/lib/notifications/dispatcher.ts` (WhatsApp + E-mail) com suíte unitária `src/lib/notifications/dispatcher.test.ts` (3/3 aprovados).
+  - Módulo puro `src/lib/export/medical-record-export.ts` (Dossiê LGPD) com suíte unitária `src/lib/export/medical-record-export.test.ts` (3/3 aprovados).
+  - Total: **30 testes unitários automatizados com 100% de sucesso**.
   - Script `"test"` configurado em `package.json`.
 - [x] **Pipeline de CI/CD (GitHub Actions)**:
   - Criado `.github/workflows/ci.yml` executando lint, testes unitários e build de produção a cada push/PR.
 - [x] **Build de Produção Validado**:
-  - `npm run build` executado com **Exit Code 0**, gerando 24 rotas (23 estáticas + `/validar/[hash]` + 5 API routes) e middleware Edge de 26.7 kB sem erros de lint ou tipos.
+  - `npm run build` executado com **Exit Code 0**, gerando 25 rotas (23 estáticas + `/onboarding/[token]` + `/validar/[hash]` + 6 API routes) e middleware Edge de 26.7 kB com zero erros de lint ou tipos.
 
 ---
 

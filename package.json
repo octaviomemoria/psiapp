@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "npx tsx src/lib/utils/psychometrics.test.ts && npx tsx src/lib/auth/two-factor.test.ts && npx tsx src/lib/crypto/document-verifier.test.ts && npx tsx src/lib/store/financial.test.ts"
+    "test": "npx tsx src/lib/utils/psychometrics.test.ts && npx tsx src/lib/auth/two-factor.test.ts && npx tsx src/lib/crypto/document-verifier.test.ts && npx tsx src/lib/monitoring/logger.test.ts && npx tsx src/lib/billing/export-financial.test.ts && npx tsx src/lib/notifications/dispatcher.test.ts && npx tsx src/lib/export/medical-record-export.test.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.6",

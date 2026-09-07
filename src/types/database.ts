@@ -519,3 +519,23 @@ export interface FinancialMetrics {
   overdueAmount: number;
 }
 
+export interface PsychometricRecord {
+  id?: string;
+  patient_id?: string;
+  scale_type: string;
+  score: number;
+  severity: string;
+  risk_flag?: boolean;
+  completed_at?: string;
+}
+
+export interface ConsentRecord {
+  id?: string;
+  patient_id?: string;
+  consent_type: string;
+  version?: string;
+  signed_at?: string;
+  ip_address?: string;
+  hash?: string;
+}
+

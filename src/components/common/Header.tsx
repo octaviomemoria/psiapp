@@ -21,7 +21,9 @@ import {
   Globe,
   BellRing,
   Lock,
-  MessageSquare
+  MessageSquare,
+  Palette,
+  Shield
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -35,6 +37,8 @@ import { PushNotificationManager } from './PushNotificationManager';
 import { TwoFactorSetupModal } from '@/components/auth/TwoFactorSetupModal';
 import { SaaSSubscriptionModal } from './SaaSSubscriptionModal';
 import { SecureChatModal } from './SecureChatModal';
+import { ClinicBrandingModal } from './ClinicBrandingModal';
+import { AccountSecurityModal } from '@/components/auth/AccountSecurityModal';
 
 export const Header: React.FC = () => {
   const {
@@ -58,6 +62,8 @@ export const Header: React.FC = () => {
   const [isTwoFactorOpen, setIsTwoFactorOpen] = useState(false);
   const [isSubscriptionOpen, setIsSubscriptionOpen] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const [isBrandingOpen, setIsBrandingOpen] = useState(false);
+  const [isAccountSecurityOpen, setIsAccountSecurityOpen] = useState(false);
 
   return (
     <header className="sticky top-0 z-40 w-full glass-header border-b border-slate-200/70 shadow-sm">
@@ -198,6 +204,14 @@ export const Header: React.FC = () => {
                   </div>
                   <button
                     type="button"
+                    onClick={() => setIsAccountSecurityOpen(true)}
+                    className="w-full text-left px-4 py-2 text-xs text-slate-700 hover:bg-slate-50 flex items-center gap-2 border-b border-slate-100"
+                  >
+                    <Shield className="w-3.5 h-3.5 text-teal-600" />
+                    <span>Segurança & Sessões Ativas</span>
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => signOut()}
                     className="w-full text-left px-4 py-2 text-xs text-rose-600 hover:bg-rose-50 flex items-center gap-2"
                   >
@@ -282,6 +296,16 @@ export const Header: React.FC = () => {
             >
               <Crown className="w-3.5 h-3.5 mr-1 text-amber-600" />
               Planos SaaS
+            </Button>
+
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setIsBrandingOpen(true)}
+              className="text-slate-600 hover:text-purple-600 hidden sm:flex"
+              title="Personalização de Marca & Identidade Visual (White-Label)"
+            >
+              <Palette className="w-4 h-4 text-purple-600" />
             </Button>
 
             <Button
@@ -391,6 +415,18 @@ export const Header: React.FC = () => {
       <SecureChatModal
         isOpen={isChatOpen}
         onClose={() => setIsChatOpen(false)}
+      />
+
+      {/* Modal de Personalização White-Label da Clínica */}
+      <ClinicBrandingModal
+        isOpen={isBrandingOpen}
+        onClose={() => setIsBrandingOpen(false)}
+      />
+
+      {/* Modal de Segurança da Conta & Sessões Ativas */}
+      <AccountSecurityModal
+        isOpen={isAccountSecurityOpen}
+        onClose={() => setIsAccountSecurityOpen(false)}
       />
     </header>
   );

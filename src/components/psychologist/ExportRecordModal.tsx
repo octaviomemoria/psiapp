@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { usePsi } from '@/lib/store/psi-context';
 import { formatDate } from '@/lib/utils';
+import { buildMedicalRecordDossier, downloadMedicalRecordDossier } from '@/lib/export/medical-record-export';
 
 interface ExportRecordModalProps {
   isOpen: boolean;
@@ -63,6 +64,18 @@ export const ExportRecordModal: React.FC<ExportRecordModalProps> = ({
       setIsExporting(false);
       window.print();
     }, 400);
+  };
+
+  const handleDownloadJson = () => {
+    if (!patient) return;
+    const dossier = buildMedicalRecordDossier(
+      patient,
+      sessions,
+      (psychometricResults as any) || [],
+      [],
+      []
+    );
+    downloadMedicalRecordDossier(dossier);
   };
 
   return (
@@ -134,21 +147,33 @@ export const ExportRecordModal: React.FC<ExportRecordModalProps> = ({
         </div>
 
         {/* Ações */}
-        <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+        <div className="flex items-center justify-between pt-2 border-t border-slate-100 flex-wrap gap-2">
           <Button variant="outline" size="sm" onClick={onClose}>
             Cancelar
           </Button>
 
-          <Button
-            variant="primary"
-            size="md"
-            onClick={handlePrintDossier}
-            disabled={isExporting}
-            className="bg-indigo-600 hover:bg-indigo-700 font-bold flex items-center gap-1.5"
-          >
-            <Printer className="w-4 h-4" />
-            <span>Gerar & Imprimir Prontuário PDF</span>
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleDownloadJson}
+              className="text-xs text-teal-800 border-teal-300 hover:bg-teal-50 flex items-center gap-1.5"
+            >
+              <Download className="w-3.5 h-3.5 text-teal-600" />
+              <span>Baixar JSON (LGPD Art. 18)</span>
+            </Button>
+
+            <Button
+              variant="primary"
+              size="md"
+              onClick={handlePrintDossier}
+              disabled={isExporting}
+              className="bg-indigo-600 hover:bg-indigo-700 font-bold flex items-center gap-1.5"
+            >
+              <Printer className="w-4 h-4" />
+              <span>Gerar & Imprimir PDF</span>
+            </Button>
+          </div>
         </div>
       </div>
     </Modal>
