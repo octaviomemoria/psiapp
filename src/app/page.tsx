@@ -12,7 +12,7 @@ import { PatientListView } from '@/components/psychologist/PatientListView';
 import { PatientDetailView } from '@/components/psychologist/PatientDetailView';
 import { AgendaView } from '@/components/psychologist/AgendaView';
 import { LibraryView } from '@/components/psychologist/LibraryView';
-import { FinancialModal } from '@/components/psychologist/FinancialModal';
+import { FinancialView } from '@/components/psychologist/FinancialView';
 import { AIAssistantWidget } from '@/components/common/AIAssistantWidget';
 
 // Patient Views
@@ -161,10 +161,7 @@ export default function Home() {
             {psychologistTab === 'biblioteca' && <LibraryView />}
 
             {psychologistTab === 'financeiro' && (
-              <FinancialModal
-                isOpen={true}
-                onClose={() => setPsychologistTab('dashboard')}
-              />
+              <FinancialView onNavigateTab={setPsychologistTab} />
             )}
           </div>
         )}

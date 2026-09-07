@@ -1,13 +1,14 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { usePsi } from '@/lib/store/psi-context';
 import { Patient } from '@/types/database';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
-import { Printer, FileText, Download, ShieldCheck, CheckCircle2, Calendar } from 'lucide-react';
+import { Printer, FileText, Download, ShieldCheck, CheckCircle2, Calendar, QrCode, ExternalLink } from 'lucide-react';
 import { formatDate, formatDateTime } from '@/lib/utils';
+import { generateDocumentHash, formatShortHash } from '@/lib/crypto/document-verifier';
 
 interface ClinicalReportModalProps {
   patient: Patient;
@@ -27,6 +28,18 @@ export const ClinicalReportModal: React.FC<ClinicalReportModalProps> = ({
   const [documentType, setDocumentType] = useState<DocumentType>('evolution_report');
   const [purpose, setPurpose] = useState('Para fins de acompanhamento multiprofissional e documentação de evolução.');
   const [sessionDateForDecl, setSessionDateForDecl] = useState(new Date().toISOString().slice(0, 10));
+  const [docHash, setDocHash] = useState('a4f289b1c03d981fe91823ab49817203');
+
+  useEffect(() => {
+    generateDocumentHash({
+      documentType,
+      patientName: patient.full_name,
+      psychologistName: currentPsychologist.profile?.full_name || 'Psicólogo Responsável',
+      crpNumber: currentPsychologist.crp_number || '000000',
+      crpState: currentPsychologist.crp_state || 'SP',
+      issuedAt: documentType === 'attendance_declaration' ? sessionDateForDecl : new Date().toISOString().slice(0, 10),
+    }).then(hash => setDocHash(hash));
+  }, [documentType, patient.full_name, currentPsychologist, sessionDateForDecl]);
 
   const patientSessions = sessions.filter(s => s.patient_id === patient.id);
   const patientGoals = goals.filter(g => g.patient_id === patient.id);
@@ -170,6 +183,29 @@ export const ClinicalReportModal: React.FC<ClinicalReportModalProps> = ({
             <p className="text-xs text-slate-600">
               Psicologia Clínica • CRP {currentPsychologist.crp_number || '00/000000'}/{currentPsychologist.crp_state || 'UF'}
             </p>
+          </div>
+
+          {/* Selo de Autenticidade Digital CFP 006/2019 */}
+          <div className="mt-8 pt-4 border-t border-dashed border-slate-300 flex items-center justify-between text-[10px] text-slate-500 font-sans">
+            <div className="space-y-0.5">
+              <p className="font-semibold text-slate-700 flex items-center gap-1">
+                <ShieldCheck className="w-3.5 h-3.5 text-teal-600" />
+                Documento com Assinatura & Validação Digital (Resolução CFP nº 006/2019)
+              </p>
+              <p>
+                Código de Autenticidade:{' '}
+                <span className="font-mono font-bold text-slate-800">{formatShortHash(docHash)}</span>
+              </p>
+              <p className="text-[9px] text-slate-400">
+                Verifique a autenticidade online em:{' '}
+                <span className="underline font-mono text-teal-700">psiapp.com.br/validar/{docHash.slice(0, 16)}</span>
+              </p>
+            </div>
+
+            <div className="p-1.5 bg-white border border-slate-200 rounded-lg text-center flex flex-col items-center">
+              <QrCode className="w-8 h-8 text-slate-800" />
+              <span className="text-[8px] font-mono text-slate-500 mt-0.5">CFP Validador</span>
+            </div>
           </div>
         </div>
 

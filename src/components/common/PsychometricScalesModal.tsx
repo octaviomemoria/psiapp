@@ -16,6 +16,7 @@ import {
   RotateCcw,
   Sparkles
 } from 'lucide-react';
+import { calculatePHQ9, calculateGAD7 } from '@/lib/utils/psychometrics';
 
 interface PsychometricScalesModalProps {
   isOpen: boolean;
@@ -82,52 +83,15 @@ export const PsychometricScalesModal: React.FC<PsychometricScalesModalProps> = (
   };
 
   const handleCalculateAndSubmit = () => {
-    let total = 0;
-    Object.values(answers).forEach(v => total += v);
-
-    let severity: 'Mínima' | 'Leve' | 'Moderada' | 'Moderadamente Grave' | 'Grave' = 'Mínima';
-    let interpretation = '';
-    let hasRisk = false;
-
-    if (selectedScale === 'phq9') {
-      hasRisk = (answers['q9'] || 0) > 0;
-      if (total <= 4) {
-        severity = 'Mínima';
-        interpretation = 'Sintomas depressivos mínimos ou ausentes. Sugere estabilidade do humor.';
-      } else if (total <= 9) {
-        severity = 'Leve';
-        interpretation = 'Depressão leve. Monitorar sintomas e reforçar rotinas de autocuidado.';
-      } else if (total <= 14) {
-        severity = 'Moderada';
-        interpretation = 'Depressão moderada. Recomendada intervenção ativa com TCC/ativação comportamental.';
-      } else if (total <= 19) {
-        severity = 'Moderadamente Grave';
-        interpretation = 'Depressão moderadamente grave. Atenção para impacto funcional significativo.';
-      } else {
-        severity = 'Grave';
-        interpretation = 'Depressão grave. Recomenda-se avaliação psiquiátrica concomitante e suporte intensivo.';
-      }
-    } else if (selectedScale === 'gad7') {
-      if (total <= 4) {
-        severity = 'Mínima';
-        interpretation = 'Ansiedade em níveis adaptativos ou mínimos.';
-      } else if (total <= 9) {
-        severity = 'Leve';
-        interpretation = 'Sintomas de ansiedade leve. Técnicas de relaxamento e mindfulness são indicadas.';
-      } else if (total <= 14) {
-        severity = 'Moderada';
-        interpretation = 'Ansiedade moderada clinicamente significativa. Indicação de reestruturação cognitiva.';
-      } else {
-        severity = 'Grave';
-        interpretation = 'Ansiedade severa. Elevado sofrimento psíquico; avaliar comorbidades e encaminhamento.';
-      }
-    }
+    const result = selectedScale === 'phq9' 
+      ? calculatePHQ9(answers) 
+      : calculateGAD7(answers);
 
     const resultObj = {
-      score: total,
-      severity,
-      interpretation,
-      hasRisk
+      score: result.score,
+      severity: result.severity,
+      interpretation: result.interpretation,
+      hasRisk: result.hasRisk
     };
 
     setCalculatedResult(resultObj);
@@ -139,11 +103,11 @@ export const PsychometricScalesModal: React.FC<PsychometricScalesModalProps> = (
       psychologist_id: currentPsychologist.id,
       scale_id: selectedScale,
       scale_name: selectedScale === 'phq9' ? 'PHQ-9 (Rastreio de Depressão)' : 'GAD-7 (Rastreio de Ansiedade)',
-      total_score: total,
-      severity_level: severity,
-      risk_flag: hasRisk,
+      total_score: result.score,
+      severity_level: result.severity,
+      risk_flag: result.hasRisk,
       answers,
-      clinical_interpretation: interpretation
+      clinical_interpretation: result.interpretation
     });
   };
 

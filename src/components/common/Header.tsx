@@ -20,7 +20,8 @@ import {
   FileText,
   Globe,
   BellRing,
-  Lock
+  Lock,
+  MessageSquare
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -31,6 +32,9 @@ import { BiometricLockModal } from './BiometricLockModal';
 import { TherapeuticContractModal } from './TherapeuticContractModal';
 import { PublicBookingPage } from '@/components/public/PublicBookingPage';
 import { PushNotificationManager } from './PushNotificationManager';
+import { TwoFactorSetupModal } from '@/components/auth/TwoFactorSetupModal';
+import { SaaSSubscriptionModal } from './SaaSSubscriptionModal';
+import { SecureChatModal } from './SecureChatModal';
 
 export const Header: React.FC = () => {
   const {
@@ -51,6 +55,9 @@ export const Header: React.FC = () => {
   const [isContractOpen, setIsContractOpen] = useState(false);
   const [isBookingOpen, setIsBookingOpen] = useState(false);
   const [isPushOpen, setIsPushOpen] = useState(false);
+  const [isTwoFactorOpen, setIsTwoFactorOpen] = useState(false);
+  const [isSubscriptionOpen, setIsSubscriptionOpen] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(false);
 
   return (
     <header className="sticky top-0 z-40 w-full glass-header border-b border-slate-200/70 shadow-sm">
@@ -248,11 +255,43 @@ export const Header: React.FC = () => {
             <Button
               variant="ghost"
               size="icon"
+              onClick={() => setIsChatOpen(true)}
+              className="text-slate-600 hover:text-teal-600 relative"
+              title="Mensageria Segura In-App (E2EE) • Horário de Expediente & Triagem"
+            >
+              <MessageSquare className="w-4 h-4 text-teal-600" />
+              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-teal-500 rounded-full ring-2 ring-white" />
+            </Button>
+
+            <Button
+              variant="ghost"
+              size="icon"
               onClick={() => setIsPushOpen(true)}
               className="text-slate-600 hover:text-amber-600"
               title="Configurar Notificações Push & Lembretes"
             >
               <BellRing className="w-4 h-4 text-amber-500" />
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsSubscriptionOpen(true)}
+              className="hidden lg:flex items-center text-xs text-amber-800 border-amber-300 bg-amber-50/60 hover:bg-amber-100 font-semibold"
+              title="Assinatura e Planos SaaS"
+            >
+              <Crown className="w-3.5 h-3.5 mr-1 text-amber-600" />
+              Planos SaaS
+            </Button>
+
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setIsTwoFactorOpen(true)}
+              className="text-slate-600 hover:text-teal-600"
+              title="Configurar Autenticação em Dois Fatores (2FA/TOTP)"
+            >
+              <Lock className="w-4 h-4 text-teal-600" />
             </Button>
 
             <Button
@@ -333,6 +372,25 @@ export const Header: React.FC = () => {
       <PushNotificationManager
         isOpen={isPushOpen}
         onClose={() => setIsPushOpen(false)}
+      />
+
+      {/* Modal de Autenticação em Dois Fatores (2FA/TOTP) */}
+      <TwoFactorSetupModal
+        isOpen={isTwoFactorOpen}
+        onClose={() => setIsTwoFactorOpen(false)}
+        userEmail={authUser?.email || authProfile?.email || 'psicologo@clinica.com.br'}
+      />
+
+      {/* Modal de Assinaturas e Planos SaaS */}
+      <SaaSSubscriptionModal
+        isOpen={isSubscriptionOpen}
+        onClose={() => setIsSubscriptionOpen(false)}
+      />
+
+      {/* Modal de Mensageria Clínica Segura (E2EE) */}
+      <SecureChatModal
+        isOpen={isChatOpen}
+        onClose={() => setIsChatOpen(false)}
       />
     </header>
   );

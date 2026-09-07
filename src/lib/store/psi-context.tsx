@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   UserProfile,
   Psychologist,
@@ -29,7 +29,12 @@ import {
   ClinicRoom,
   SaaSTenant,
   SaaSPlan,
-  PlatformAuditLog
+  PlatformAuditLog,
+  FinancialCategory,
+  FinancialTransaction,
+  PatientPackage,
+  FinancialMetrics,
+  TransactionStatus
 } from '@/types/database';
 import {
   INITIAL_PSYCHOLOGIST,
@@ -53,7 +58,10 @@ import {
   INITIAL_CLINIC_ROOMS,
   INITIAL_SAAS_PLANS,
   INITIAL_SAAS_TENANTS,
-  INITIAL_PLATFORM_LOGS
+  INITIAL_PLATFORM_LOGS,
+  INITIAL_FINANCIAL_CATEGORIES,
+  INITIAL_FINANCIAL_TRANSACTIONS,
+  INITIAL_PATIENT_PACKAGES
 } from './initial-data';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
 import { SupabaseService } from '@/lib/supabase/service';
@@ -90,6 +98,18 @@ interface PsiContextType {
   cognitiveDiagrams: CognitiveDiagram[];
   voiceAnchors: VoiceAnchor[];
   patientInvites: PatientInvite[];
+
+  // Módulo Financeiro, Livro Caixa & Pacotes
+  financialCategories: FinancialCategory[];
+  financialTransactions: FinancialTransaction[];
+  patientPackages: PatientPackage[];
+  financialMetrics: FinancialMetrics;
+  addFinancialTransaction: (transaction: Omit<FinancialTransaction, 'id' | 'created_at' | 'updated_at'>) => FinancialTransaction;
+  updateFinancialTransaction: (id: string, updates: Partial<FinancialTransaction>) => void;
+  deleteFinancialTransaction: (id: string) => void;
+  addPatientPackage: (pkg: Omit<PatientPackage, 'id' | 'created_at' | 'updated_at'>) => PatientPackage;
+  updatePatientPackage: (id: string, updates: Partial<PatientPackage>) => void;
+  consumePackageSession: (packageId: string) => void;
 
   // Coleções do Gerente da Clínica & SuperAdmin SaaS
   clinic: Clinic;
@@ -206,6 +226,11 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [voiceAnchors, setVoiceAnchors] = useState<VoiceAnchor[]>(INITIAL_VOICE_ANCHORS);
   const [patientInvites, setPatientInvites] = useState<PatientInvite[]>(INITIAL_INVITES);
 
+  // Estados do Módulo Financeiro, Livro Caixa & Pacotes
+  const [financialCategories, setFinancialCategories] = useState<FinancialCategory[]>(INITIAL_FINANCIAL_CATEGORIES);
+  const [financialTransactions, setFinancialTransactions] = useState<FinancialTransaction[]>(INITIAL_FINANCIAL_TRANSACTIONS);
+  const [patientPackages, setPatientPackages] = useState<PatientPackage[]>(INITIAL_PATIENT_PACKAGES);
+
   // Estados do Gerente da Clínica e SuperAdmin SaaS
   const [clinic, setClinic] = useState<Clinic>(INITIAL_CLINIC);
   const [clinicPsychologists, setClinicPsychologists] = useState<ClinicPsychologist[]>(INITIAL_CLINIC_PSYCHOLOGISTS);
@@ -242,6 +267,9 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setCognitiveDiagrams(INITIAL_COGNITIVE_DIAGRAMS);
     setVoiceAnchors(INITIAL_VOICE_ANCHORS);
     setPatientInvites(INITIAL_INVITES);
+    setFinancialCategories(INITIAL_FINANCIAL_CATEGORIES);
+    setFinancialTransactions(INITIAL_FINANCIAL_TRANSACTIONS);
+    setPatientPackages(INITIAL_PATIENT_PACKAGES);
     setClinic(INITIAL_CLINIC);
     setClinicPsychologists(INITIAL_CLINIC_PSYCHOLOGISTS);
     setClinicRooms(INITIAL_CLINIC_ROOMS);
@@ -287,7 +315,10 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             liveAnchors,
             liveDiary,
             liveMoods,
-            liveInvites
+            liveInvites,
+            liveCategories,
+            liveTransactions,
+            livePackages
           ] = await Promise.all([
             SupabaseService.getPatients(psychologist.id),
             SupabaseService.getAppointments(psychologist.id),
@@ -300,7 +331,10 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             SupabaseService.getVoiceAnchors(undefined, psychologist.id),
             SupabaseService.getDiaryEntries(undefined, psychologist.id),
             SupabaseService.getMoodLogs(),
-            SupabaseService.getPatientInvites(psychologist.id)
+            SupabaseService.getPatientInvites(psychologist.id),
+            SupabaseService.getFinancialCategories(psychologist.id),
+            SupabaseService.getFinancialTransactions(psychologist.id),
+            SupabaseService.getPatientPackages(psychologist.id),
           ]);
 
           setPatients(livePatients || []);
@@ -323,6 +357,11 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setDiaryEntries(liveDiary || []);
           setMoodLogs(liveMoods || []);
           setPatientInvites(liveInvites || []);
+          if (liveCategories && liveCategories.length > 0) {
+            setFinancialCategories(liveCategories);
+          }
+          setFinancialTransactions(liveTransactions || []);
+          setPatientPackages(livePackages || []);
         }
       }
     } catch (err) {
@@ -381,6 +420,9 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setCognitiveDiagrams([]);
     setVoiceAnchors([]);
     setPatientInvites([]);
+    setFinancialCategories(INITIAL_FINANCIAL_CATEGORIES);
+    setFinancialTransactions([]);
+    setPatientPackages([]);
     setCurrentPatientId('');
 
     setNotifications(prev => [
@@ -446,6 +488,12 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, () => {
         loadLiveDataFromSupabase();
       })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'financial_transactions' }, () => {
+        loadLiveDataFromSupabase();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'patient_packages' }, () => {
+        loadLiveDataFromSupabase();
+      })
       .subscribe();
 
     return () => {
@@ -486,6 +534,9 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (parsed.cognitiveDiagrams) setCognitiveDiagrams(parsed.cognitiveDiagrams);
           if (parsed.voiceAnchors) setVoiceAnchors(parsed.voiceAnchors);
           if (parsed.patientInvites) setPatientInvites(parsed.patientInvites);
+          if (parsed.financialCategories) setFinancialCategories(parsed.financialCategories);
+          if (parsed.financialTransactions) setFinancialTransactions(parsed.financialTransactions);
+          if (parsed.patientPackages) setPatientPackages(parsed.patientPackages);
           if (parsed.clinic) setClinic(parsed.clinic);
           if (parsed.clinicPsychologists) setClinicPsychologists(parsed.clinicPsychologists);
           if (parsed.clinicRooms) setClinicRooms(parsed.clinicRooms);
@@ -521,6 +572,9 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         cognitiveDiagrams,
         voiceAnchors,
         patientInvites,
+        financialCategories,
+        financialTransactions,
+        patientPackages,
         clinic,
         clinicPsychologists,
         clinicRooms,
@@ -550,6 +604,9 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     cognitiveDiagrams,
     voiceAnchors,
     patientInvites,
+    financialCategories,
+    financialTransactions,
+    patientPackages,
     clinic,
     clinicPsychologists,
     clinicRooms,
@@ -794,24 +851,84 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [isLiveProduction]);
 
   const updateAppointmentPayment = useCallback((id: string, paymentStatus: PaymentStatus, price?: number, receiptNumber?: string) => {
+    const generatedReceipt = receiptNumber || `REC-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`;
+    const nowIso = new Date().toISOString();
+    const isPaid = paymentStatus.startsWith('paid');
+
     setAppointments(prev => prev.map(a => {
       if (a.id !== id) return a;
       return {
         ...a,
         payment_status: paymentStatus,
         price: price !== undefined ? price : a.price,
-        receipt_number: receiptNumber || a.receipt_number || `REC-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`,
-        paid_at: paymentStatus.startsWith('paid') ? new Date().toISOString() : a.paid_at,
+        receipt_number: generatedReceipt,
+        paid_at: isPaid ? nowIso : a.paid_at,
       };
     }));
+
+    // Sincronizar com transação financeira
+    const apt = appointments.find(a => a.id === id);
+    if (apt) {
+      const finalPrice = Number(price !== undefined ? price : (apt.price || 220));
+      const patient = patients.find(p => p.id === apt.patient_id);
+
+      setFinancialTransactions(prev => {
+        const existing = prev.find(t => t.appointment_id === id);
+        if (existing) {
+          const updated = prev.map(t => t.id === existing.id ? {
+            ...t,
+            status: isPaid ? ('completed' as TransactionStatus) : ('pending' as TransactionStatus),
+            paid_at: isPaid ? nowIso : undefined,
+            amount: finalPrice,
+            receipt_number: generatedReceipt,
+            updated_at: nowIso
+          } : t);
+          if (isSupabaseConfigured && isLiveProduction) {
+            SupabaseService.updateFinancialTransaction(existing.id, {
+              status: isPaid ? 'completed' : 'pending',
+              paid_at: isPaid ? nowIso : undefined,
+              amount: finalPrice,
+              receipt_number: generatedReceipt
+            });
+          }
+          return updated;
+        } else {
+          const newTx: FinancialTransaction = {
+            id: `tx-${Date.now()}`,
+            psychologist_id: currentPsychologist.id,
+            patient_id: apt.patient_id,
+            appointment_id: apt.id,
+            title: `Sessão de Psicoterapia - ${apt.patient_name || patient?.full_name || 'Paciente'}`,
+            description: `Atendimento clínico agendado para ${apt.starts_at}`,
+            type: 'income',
+            category_name: 'Atendimento Clínico Individual',
+            amount: finalPrice,
+            due_date: apt.starts_at ? apt.starts_at.split('T')[0] : nowIso.split('T')[0],
+            paid_at: isPaid ? nowIso : undefined,
+            status: isPaid ? 'completed' : 'pending',
+            payment_method: paymentStatus === 'paid_pix' ? 'pix' : paymentStatus === 'paid_card' ? 'credit_card' : paymentStatus === 'insurance' ? 'insurance_reimbursement' : 'pix',
+            receipt_number: generatedReceipt,
+            financial_responsible_name: (patient as any)?.financial_responsible_name || patient?.full_name || apt.patient_name,
+            financial_responsible_cpf: (patient as any)?.financial_responsible_cpf || (patient as any)?.cpf,
+            is_tax_deductible: false,
+            created_at: nowIso,
+            updated_at: nowIso
+          };
+          if (isSupabaseConfigured && isLiveProduction) {
+            SupabaseService.insertFinancialTransaction(newTx);
+          }
+          return [newTx, ...prev];
+        }
+      });
+    }
 
     if (isSupabaseConfigured && isLiveProduction) {
       SupabaseService.updateAppointment(id, {
         payment_status: paymentStatus,
-        paid_at: paymentStatus.startsWith('paid') ? new Date().toISOString() : undefined,
+        paid_at: isPaid ? nowIso : undefined,
       });
     }
-  }, [isLiveProduction]);
+  }, [appointments, patients, currentPsychologist.id, isLiveProduction]);
 
   const deleteAppointment = useCallback((id: string) => {
     setAppointments(prev => prev.filter(a => a.id !== id));
@@ -1284,6 +1401,172 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   }, [addNotification]);
 
+  // ===========================================================================
+  // MÓDULO FINANCEIRO, LIVRO CAIXA & GESTÃO DE PACOTES
+  // ===========================================================================
+
+  const financialMetrics: FinancialMetrics = useMemo(() => {
+    let totalIncomeReceived = 0;
+    let totalIncomePending = 0;
+    let totalExpensesPaid = 0;
+    let totalExpensesPending = 0;
+    let taxDeductibleExpenses = 0;
+    let overdueCount = 0;
+    let overdueAmount = 0;
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+
+    for (const t of financialTransactions) {
+      if (t.status === 'canceled') continue;
+
+      const amount = Number(t.amount) || 0;
+      const isCompleted = t.status === 'completed';
+      const isPending = t.status === 'pending';
+      const dueDate = t.due_date ? new Date(t.due_date) : null;
+      const isOverdue = isPending && dueDate ? dueDate < now : false;
+
+      if (t.type === 'income') {
+        if (isCompleted) {
+          totalIncomeReceived += amount;
+        } else if (isPending) {
+          totalIncomePending += amount;
+          if (isOverdue) {
+            overdueCount += 1;
+            overdueAmount += amount;
+          }
+        }
+      } else if (t.type === 'expense') {
+        if (isCompleted) {
+          totalExpensesPaid += amount;
+          if (t.is_tax_deductible) {
+            taxDeductibleExpenses += amount;
+          }
+        } else if (isPending) {
+          totalExpensesPending += amount;
+        }
+      }
+    }
+
+    const netIncome = totalIncomeReceived - totalExpensesPaid;
+
+    return {
+      totalIncomeReceived,
+      totalIncomePending,
+      totalExpensesPaid,
+      totalExpensesPending,
+      netIncome,
+      taxDeductibleExpenses,
+      overdueCount,
+      overdueAmount,
+    };
+  }, [financialTransactions]);
+
+  const addFinancialTransaction = useCallback((data: Omit<FinancialTransaction, 'id' | 'created_at' | 'updated_at'>) => {
+    const tempId = `tx-${Date.now()}`;
+    const newTx: FinancialTransaction = {
+      ...data,
+      id: tempId,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    setFinancialTransactions(prev => [newTx, ...prev]);
+
+    if (isSupabaseConfigured && isLiveProduction) {
+      SupabaseService.insertFinancialTransaction(data).then(realTx => {
+        if (realTx && realTx.id) {
+          setFinancialTransactions(prev => prev.map(t => t.id === tempId ? realTx : t));
+        }
+      });
+    }
+    return newTx;
+  }, [isLiveProduction]);
+
+  const updateFinancialTransaction = useCallback((id: string, updates: Partial<FinancialTransaction>) => {
+    const updated_at = new Date().toISOString();
+    setFinancialTransactions(prev => prev.map(t => t.id === id ? { ...t, ...updates, updated_at } : t));
+
+    if (isSupabaseConfigured && isLiveProduction) {
+      SupabaseService.updateFinancialTransaction(id, updates);
+    }
+  }, [isLiveProduction]);
+
+  const deleteFinancialTransaction = useCallback((id: string) => {
+    setFinancialTransactions(prev => prev.filter(t => t.id !== id));
+
+    if (isSupabaseConfigured && isLiveProduction) {
+      SupabaseService.deleteFinancialTransaction(id);
+    }
+  }, [isLiveProduction]);
+
+  const addPatientPackage = useCallback((data: Omit<PatientPackage, 'id' | 'created_at' | 'updated_at'>) => {
+    const tempId = `pkg-${Date.now()}`;
+    const newPkg: PatientPackage = {
+      ...data,
+      id: tempId,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    setPatientPackages(prev => [newPkg, ...prev]);
+
+    // Criar transação financeira correspondente para o pacote contratado
+    const patient = patients.find(p => p.id === data.patient_id);
+    const title = `Pacote de ${data.total_sessions} Sessões - ${patient?.full_name || 'Paciente'}`;
+    const nowIso = new Date().toISOString();
+    const isPaid = data.payment_status === 'paid';
+
+    addFinancialTransaction({
+      psychologist_id: data.psychologist_id,
+      patient_id: data.patient_id,
+      package_id: tempId,
+      title,
+      description: data.notes || `Pacote terapêutico (${data.total_sessions} sessões - R$ ${data.session_unit_price}/sessão)`,
+      type: 'income',
+      category_name: 'Pacote / Mensalidade de Sessões',
+      amount: data.total_price,
+      due_date: data.start_date || nowIso.split('T')[0],
+      paid_at: isPaid ? nowIso : undefined,
+      status: isPaid ? 'completed' : 'pending',
+      payment_method: 'pix',
+      financial_responsible_name: (patient as any)?.financial_responsible_name || patient?.full_name,
+      financial_responsible_cpf: (patient as any)?.financial_responsible_cpf || (patient as any)?.cpf,
+      is_tax_deductible: false,
+    });
+
+    if (isSupabaseConfigured && isLiveProduction) {
+      SupabaseService.insertPatientPackage(data).then(realPkg => {
+        if (realPkg && realPkg.id) {
+          setPatientPackages(prev => prev.map(p => p.id === tempId ? realPkg : p));
+        }
+      });
+    }
+    return newPkg;
+  }, [isLiveProduction, patients, addFinancialTransaction]);
+
+  const updatePatientPackage = useCallback((id: string, updates: Partial<PatientPackage>) => {
+    const updated_at = new Date().toISOString();
+    setPatientPackages(prev => prev.map(p => p.id === id ? { ...p, ...updates, updated_at } : p));
+
+    if (isSupabaseConfigured && isLiveProduction) {
+      SupabaseService.updatePatientPackage(id, updates);
+    }
+  }, [isLiveProduction]);
+
+  const consumePackageSession = useCallback((packageId: string) => {
+    setPatientPackages(prev => prev.map(pkg => {
+      if (pkg.id !== packageId) return pkg;
+      const newCompleted = Math.min(pkg.sessions_completed + 1, pkg.total_sessions);
+      const updated = {
+        ...pkg,
+        sessions_completed: newCompleted,
+        updated_at: new Date().toISOString(),
+      };
+      if (isSupabaseConfigured && isLiveProduction) {
+        SupabaseService.updatePatientPackage(packageId, { sessions_completed: newCompleted });
+      }
+      return updated;
+    }));
+  }, [isLiveProduction]);
+
   return (
     <PsiContext.Provider
       value={{
@@ -1314,6 +1597,16 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         cognitiveDiagrams,
         voiceAnchors,
         patientInvites,
+        financialCategories,
+        financialTransactions,
+        patientPackages,
+        financialMetrics,
+        addFinancialTransaction,
+        updateFinancialTransaction,
+        deleteFinancialTransaction,
+        addPatientPackage,
+        updatePatientPackage,
+        consumePackageSession,
         clinic,
         clinicPsychologists,
         clinicRooms,

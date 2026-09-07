@@ -1,0 +1,18 @@
+{
+  "name": "PsiApp — Plataforma Clínica & Evolução Terapêutica",
+  "short_name": "PsiApp",
+  "description": "SaaS de prontuário eletrônico, telepsicologia e acompanhamento terapêutico entre sessões em conformidade com CFP e LGPD.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F8FAFC",
+  "theme_color": "#0D9488",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

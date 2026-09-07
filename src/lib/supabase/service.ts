@@ -14,7 +14,10 @@ import {
   PsychometricResult,
   CognitiveDiagram,
   VoiceAnchor,
-  PatientInvite
+  PatientInvite,
+  FinancialCategory,
+  FinancialTransaction,
+  PatientPackage
 } from '@/types/database';
 
 export const SupabaseService = {
@@ -893,6 +896,138 @@ export const SupabaseService = {
       return data;
     } catch {
       return null;
+    }
+  },
+
+  // ==========================================
+  // MÓDULO FINANCEIRO (TRANSAÇÕES, CATEGORIAS & PACOTES)
+  // ==========================================
+  async getFinancialTransactions(psychologistId: string): Promise<FinancialTransaction[]> {
+    if (!isSupabaseConfigured || !supabase) return [];
+    try {
+      const { data, error } = await supabase
+        .from('financial_transactions')
+        .select('*')
+        .eq('psychologist_id', psychologistId)
+        .order('due_date', { ascending: false });
+
+      if (error) return [];
+      return data || [];
+    } catch {
+      return [];
+    }
+  },
+
+  async insertFinancialTransaction(transaction: Omit<FinancialTransaction, 'id' | 'created_at' | 'updated_at'>): Promise<FinancialTransaction | null> {
+    if (!isSupabaseConfigured || !supabase) return null;
+    try {
+      const { data, error } = await supabase
+        .from('financial_transactions')
+        .insert([transaction])
+        .select()
+        .single();
+
+      if (error) {
+        console.warn('Erro ao inserir transação financeira:', error.message);
+        return null;
+      }
+      return data;
+    } catch (err) {
+      console.warn('Erro na chamada Supabase de transação:', err);
+      return null;
+    }
+  },
+
+  async updateFinancialTransaction(id: string, updates: Partial<FinancialTransaction>): Promise<boolean> {
+    if (!isSupabaseConfigured || !supabase) return false;
+    try {
+      const { error } = await supabase
+        .from('financial_transactions')
+        .update({ ...updates, updated_at: new Date().toISOString() })
+        .eq('id', id);
+
+      return !error;
+    } catch {
+      return false;
+    }
+  },
+
+  async deleteFinancialTransaction(id: string): Promise<boolean> {
+    if (!isSupabaseConfigured || !supabase) return false;
+    try {
+      const { error } = await supabase
+        .from('financial_transactions')
+        .delete()
+        .eq('id', id);
+
+      return !error;
+    } catch {
+      return false;
+    }
+  },
+
+  async getFinancialCategories(psychologistId?: string): Promise<FinancialCategory[]> {
+    if (!isSupabaseConfigured || !supabase) return [];
+    try {
+      let query = supabase.from('financial_categories').select('*');
+      if (psychologistId) {
+        query = query.or(`psychologist_id.is.null,psychologist_id.eq.${psychologistId}`);
+      }
+      const { data, error } = await query.order('name');
+      if (error) return [];
+      return data || [];
+    } catch {
+      return [];
+    }
+  },
+
+  async getPatientPackages(psychologistId: string, patientId?: string): Promise<PatientPackage[]> {
+    if (!isSupabaseConfigured || !supabase) return [];
+    try {
+      let query = supabase
+        .from('patient_packages')
+        .select('*')
+        .eq('psychologist_id', psychologistId);
+
+      if (patientId) {
+        query = query.eq('patient_id', patientId);
+      }
+
+      const { data, error } = await query.order('created_at', { ascending: false });
+      if (error) return [];
+      return data || [];
+    } catch {
+      return [];
+    }
+  },
+
+  async insertPatientPackage(pkg: Omit<PatientPackage, 'id' | 'created_at' | 'updated_at'>): Promise<PatientPackage | null> {
+    if (!isSupabaseConfigured || !supabase) return null;
+    try {
+      const { data, error } = await supabase
+        .from('patient_packages')
+        .insert([pkg])
+        .select()
+        .single();
+
+      if (error) return null;
+      return data;
+    } catch {
+      return null;
+    }
+  },
+
+  async updatePatientPackage(id: string, updates: Partial<PatientPackage>): Promise<boolean> {
+    if (!isSupabaseConfigured || !supabase) return false;
+    try {
+      const { error } = await supabase
+        .from('patient_packages')
+        .update({ ...updates, updated_at: new Date().toISOString() })
+        .eq('id', id);
+
+      return !error;
+    } catch {
+      return false;
     }
   }
 };

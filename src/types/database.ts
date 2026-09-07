@@ -435,3 +435,87 @@ export interface PlatformAuditLog {
   ip_address: string;
 }
 
+// =============================================================================
+// MÓDULO FINANCEIRO (RECEITAS, DESPESAS, PACOTES & LIVRO CAIXA)
+// =============================================================================
+
+export type TransactionType = 'income' | 'expense';
+export type TransactionStatus = 'pending' | 'completed' | 'canceled';
+export type TransactionPaymentMethod =
+  | 'pix'
+  | 'credit_card'
+  | 'debit_card'
+  | 'bank_transfer'
+  | 'cash'
+  | 'boleto'
+  | 'insurance_reimbursement';
+
+export interface FinancialCategory {
+  id: string;
+  psychologist_id?: string;
+  name: string;
+  type: TransactionType;
+  icon?: string;
+  color?: string;
+  is_tax_deductible: boolean; // Abatível no Carnê-Leão / Livro Caixa
+  is_system?: boolean;
+  created_at?: string;
+}
+
+export interface FinancialTransaction {
+  id: string;
+  psychologist_id: string;
+  clinic_id?: string;
+  patient_id?: string;
+  appointment_id?: string;
+  package_id?: string;
+  title: string;
+  description?: string;
+  type: TransactionType;
+  category_id?: string;
+  category_name: string;
+  amount: number;
+  due_date: string;
+  paid_at?: string;
+  status: TransactionStatus;
+  payment_method?: TransactionPaymentMethod;
+  receipt_number?: string;
+  financial_responsible_name?: string;
+  financial_responsible_cpf?: string;
+  is_tax_deductible: boolean;
+  receipt_pdf_url?: string;
+  receipt_notes?: string;
+  is_recurring?: boolean;
+  recurrence_period?: 'monthly' | 'yearly' | 'weekly';
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface PatientPackage {
+  id: string;
+  psychologist_id: string;
+  patient_id: string;
+  title: string;
+  total_sessions: number;
+  sessions_completed: number;
+  total_price: number;
+  session_unit_price: number;
+  payment_status: 'pending' | 'paid' | 'partially_paid';
+  start_date: string;
+  valid_until?: string;
+  notes?: string;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface FinancialMetrics {
+  totalIncomeReceived: number;
+  totalIncomePending: number;
+  totalExpensesPaid: number;
+  totalExpensesPending: number;
+  netIncome: number;
+  taxDeductibleExpenses: number;
+  overdueCount: number;
+  overdueAmount: number;
+}
+

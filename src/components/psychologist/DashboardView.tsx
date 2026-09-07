@@ -26,7 +26,9 @@ import { SessionFormModal } from './SessionFormModal';
 import { ExerciseBuilderModal } from './ExerciseBuilderModal';
 import { LiveSessionModal } from './LiveSessionModal';
 import { PatientInviteModal } from './PatientInviteModal';
-import { Play, UserPlus } from 'lucide-react';
+import { TelepsychologyCockpitModal } from './TelepsychologyCockpitModal';
+import { PixPaymentModal } from '@/components/common/PixPaymentModal';
+import { Play, UserPlus, Video, QrCode } from 'lucide-react';
 
 interface DashboardViewProps {
   onNavigateTab: (tab: string) => void;
@@ -48,6 +50,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab, onS
   const [isExerciseModalOpen, setIsExerciseModalOpen] = useState(false);
   const [isLiveSessionModalOpen, setIsLiveSessionModalOpen] = useState(false);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
+  const [isTelepsychologyModalOpen, setIsTelepsychologyModalOpen] = useState(false);
+  const [pixAppointment, setPixAppointment] = useState<any>(null);
   const [selectedPatientForLive, setSelectedPatientForLive] = useState<any>(patients[0]);
 
   // Cálculos de Métricas
@@ -100,6 +104,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab, onS
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5">
+            <Button
+              variant="primary"
+              size="md"
+              onClick={() => {
+                if (patients && patients.length > 0) {
+                  setSelectedPatientForLive(patients[0]);
+                  setIsTelepsychologyModalOpen(true);
+                } else {
+                  setIsInviteModalOpen(true);
+                }
+              }}
+              className="bg-teal-600 hover:bg-teal-500 text-white shadow-md font-semibold flex items-center gap-1.5"
+            >
+              <Video className="w-4 h-4" />
+              Teleconsulta WebRTC (CFP)
+            </Button>
             <Button
               variant="primary"
               size="md"
@@ -357,6 +377,37 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab, onS
                         >
                           {appointment.status === 'confirmed' ? 'Confirmado' : 'Agendado'}
                         </Badge>
+                        {appointment.modality === 'online' && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const p = patients.find(pat => pat.id === appointment.patient_id) || { id: appointment.patient_id, full_name: appointment.patient_name };
+                              setSelectedPatientForLive(p);
+                              setIsTelepsychologyModalOpen(true);
+                            }}
+                            className="p-1.5 rounded-lg bg-teal-50 text-teal-700 hover:bg-teal-100 transition-colors"
+                            title="Iniciar Teleconsulta WebRTC (CFP 009/2024)"
+                          >
+                            <Video className="w-4 h-4" />
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const p = patients.find(pat => pat.id === appointment.patient_id);
+                            setPixAppointment({
+                              id: appointment.id,
+                              patient_id: appointment.patient_id,
+                              patient_name: p?.full_name || appointment.patient_name || 'Paciente',
+                              price: appointment.price || 220,
+                              starts_at: appointment.starts_at
+                            });
+                          }}
+                          className="p-1.5 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors"
+                          title="Cobrar Sessão via Pix"
+                        >
+                          <QrCode className="w-4 h-4" />
+                        </button>
                         <Button
                           variant="outline"
                           size="sm"
@@ -573,6 +624,27 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab, onS
         isOpen={isInviteModalOpen}
         onClose={() => setIsInviteModalOpen(false)}
       />
+
+      {selectedPatientForLive && (
+        <TelepsychologyCockpitModal
+          isOpen={isTelepsychologyModalOpen}
+          onClose={() => setIsTelepsychologyModalOpen(false)}
+          patientId={selectedPatientForLive.id}
+          patientName={selectedPatientForLive.full_name || selectedPatientForLive.name || 'Paciente'}
+        />
+      )}
+
+      {pixAppointment && (
+        <PixPaymentModal
+          isOpen={true}
+          onClose={() => setPixAppointment(null)}
+          appointmentId={pixAppointment.id}
+          patientId={pixAppointment.patient_id}
+          patientName={pixAppointment.patient_name}
+          amount={pixAppointment.price}
+          sessionDate={pixAppointment.starts_at}
+        />
+      )}
     </div>
   );
 };
