@@ -140,8 +140,8 @@ export const FinancialModal: React.FC<{ isOpen: boolean; onClose: () => void }> 
 
             <div className="pt-4 text-center font-sans space-y-0.5">
               <div className="w-48 h-px bg-slate-300 mx-auto mb-1" />
-              <p className="font-bold text-slate-900">{currentPsychologist.profile?.full_name || 'Dra. Ana Martins'}</p>
-              <p className="text-[11px] text-slate-600">CRP {currentPsychologist.crp_number}/{currentPsychologist.crp_state}</p>
+              <p className="font-bold text-slate-900">{currentPsychologist.profile?.full_name || 'Psicólogo(a) Responsável'}</p>
+              <p className="text-[11px] text-slate-600">CRP {currentPsychologist.crp_number || '00/000000'}/{currentPsychologist.crp_state || 'UF'}</p>
             </div>
           </div>
         )}

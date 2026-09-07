@@ -61,13 +61,13 @@ export const PatientProfileView: React.FC = () => {
       <Card className="p-6 bg-gradient-to-br from-teal-50/50 to-slate-50 border-teal-100">
         <h4 className="text-sm font-bold text-teal-900 mb-3 flex items-center gap-2">
           <ShieldCheck className="w-4 h-4 text-teal-700" />
-          Psicóloga Responsável Técnica
+          Psicólogo(a) Responsável Técnico
         </h4>
         <div className="space-y-2 text-xs text-slate-700">
-          <p className="text-base font-bold text-slate-800">{currentPsychologist.profile?.full_name || 'Dra. Ana Martins'}</p>
-          <p>CRP: {currentPsychologist.crp_number}/{currentPsychologist.crp_state}</p>
-          <p>Abordagem: {currentPsychologist.approach}</p>
-          <p className="text-slate-500 italic mt-2">"{currentPsychologist.bio}"</p>
+          <p className="text-base font-bold text-slate-800">{currentPsychologist.profile?.full_name || 'Psicólogo(a) Responsável'}</p>
+          <p>CRP: {currentPsychologist.crp_number || 'Não informado'}/{currentPsychologist.crp_state || 'UF'}</p>
+          <p>Abordagem: {currentPsychologist.approach || 'Psicoterapia Clínica'}</p>
+          {currentPsychologist.bio && <p className="text-slate-500 italic mt-2">"{currentPsychologist.bio}"</p>}
         </div>
       </Card>
 
@@ -80,11 +80,11 @@ export const PatientProfileView: React.FC = () => {
         <div className="grid sm:grid-cols-2 gap-3 text-xs text-slate-600 bg-slate-50 p-4 rounded-xl border border-slate-100">
           <div>
             <span className="font-semibold text-slate-700 block">Nome do Contato:</span>
-            {currentPatient.emergency_contact_name || 'Lucas Costa (Irmão)'}
+            {currentPatient.emergency_contact_name || 'Não informado'}
           </div>
           <div>
             <span className="font-semibold text-slate-700 block">Telefone:</span>
-            {currentPatient.emergency_contact_phone || '(11) 98888-1111'}
+            {currentPatient.emergency_contact_phone || 'Não informado'}
           </div>
         </div>
       </Card>
@@ -104,7 +104,7 @@ export const PatientProfileView: React.FC = () => {
         </div>
       </Card>
 
-      {/* Alternar de volta para visão da Psicóloga (Para fins de Teste / Demo) */}
+      {/* Retornar ao Painel do Terapeuta */}
       <div className="pt-2">
         <Button
           variant="outline"
@@ -112,7 +112,7 @@ export const PatientProfileView: React.FC = () => {
           onClick={() => switchRole('psychologist')}
           className="text-xs font-semibold text-teal-800 border-teal-200 hover:bg-teal-50"
         >
-          Alternar para Visão da Psicóloga (Dra. Ana Martins)
+          Alternar para Visão do Profissional
         </Button>
       </div>
     </div>

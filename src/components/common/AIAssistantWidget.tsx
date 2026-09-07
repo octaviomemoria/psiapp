@@ -86,10 +86,10 @@ export const AIAssistantWidget: React.FC = () => {
     setAiOutput(null);
     try {
       const res = await AIService.generateLongitudinalSummary(
-        currentPatient?.full_name || 'Mariana Costa',
-        diaryEntries.length || 8,
+        currentPatient?.full_name || 'Paciente',
+        diaryEntries.length || 0,
         3.8,
-        ['Ansiedade', 'Sobrecarga', 'Trabalho', 'Insônia']
+        ['Sintomas relatados', 'Evolução clínica']
       );
       setProviderBadge('Síntese Longitudinal');
       setAiOutput(

@@ -28,8 +28,8 @@ interface TherapeuticContractModalProps {
 export const TherapeuticContractModal: React.FC<TherapeuticContractModalProps> = ({
   isOpen,
   onClose,
-  patientName = 'Mariana Costa',
-  psychologistName = 'Dra. Ana Martins (CRP 06/142859)'
+  patientName = 'Paciente',
+  psychologistName = 'Psicólogo(a) Responsável'
 }) => {
   const { authUser, isLiveProduction, addNotification } = usePsi();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);

@@ -69,10 +69,10 @@ export const PatientHomeView: React.FC<PatientHomeViewProps> = ({ onNavigateTab 
 
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
-              Olá, {currentPatient.social_name || currentPatient.full_name.split(' ')[0]}
+              Olá, {currentPatient.social_name || (currentPatient.full_name ? currentPatient.full_name.split(' ')[0] : 'Paciente')}
             </h1>
             <p className="text-teal-100 text-sm mt-1">
-              Acompanhamento com a <strong>{currentPsychologist.profile?.display_name || 'Dra. Ana Martins'}</strong>
+              Acompanhamento com <strong>{currentPsychologist.profile?.display_name || currentPsychologist.profile?.full_name || 'Terapeuta'}</strong>
             </p>
           </div>
 

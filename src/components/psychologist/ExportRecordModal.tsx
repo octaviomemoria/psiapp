@@ -84,10 +84,10 @@ export const ExportRecordModal: React.FC<ExportRecordModalProps> = ({
           <div>
             <span className="text-[10px] text-slate-400 block uppercase font-bold">Psicólogo(a) Responsável</span>
             <span className="font-bold text-slate-900 text-sm">
-              {currentPsychologist.profile?.full_name || 'Dra. Ana Martins'}
+              {currentPsychologist.profile?.full_name || 'Psicólogo(a) Responsável'}
             </span>
             <p className="text-[11px] text-indigo-700 font-semibold">
-              CRP {currentPsychologist.crp_number}/{currentPsychologist.crp_state}
+              CRP {currentPsychologist.crp_number || '00/000000'}/{currentPsychologist.crp_state || 'UF'}
             </p>
           </div>
         </div>

@@ -2,7 +2,6 @@
 
 import React, { useState } from 'react';
 import { usePsi } from '@/lib/store/psi-context';
-import { INITIAL_TEST_ACCOUNTS } from '@/lib/store/initial-data';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
 import { SupabaseService } from '@/lib/supabase/service';
 import { Modal } from '@/components/ui/Modal';
@@ -13,16 +12,10 @@ import {
   Mail,
   User,
   Brain,
-  ShieldCheck,
   CheckCircle2,
   AlertCircle,
   KeyRound,
-  Sparkles,
-  ArrowRight,
-  RefreshCw,
-  Building2,
-  Crown,
-  Heart
+  RefreshCw
 } from 'lucide-react';
 
 interface AuthModalProps {
@@ -59,31 +52,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
     setSuccessMsg(null);
   };
 
-  // Função para login rápido em 1 clique
-  const handleQuickLogin = (testEmail: string, testPass: string, role: string) => {
-    setEmail(testEmail);
-    setPassword(testPass);
-    setErrorMsg(null);
-
-    if (testEmail === 'gerente@teste.com') {
-      switchRole('manager');
-      setSuccessMsg('Conectado como Gerente da Clínica (Carlos Drummond)!');
-    } else if (testEmail === 'superadmin@teste.com') {
-      switchRole('superadmin');
-      setSuccessMsg('Conectado como SuperAdmin do SaaS (Octávio Memória)!');
-    } else if (testEmail === 'psicologo@teste.com') {
-      switchRole('psychologist');
-      setSuccessMsg('Conectado como Psicóloga Clínica (Dra. Ana Martins)!');
-    } else {
-      switchRole('patient', 'pat-mariana-costa');
-      setSuccessMsg('Conectado como Paciente (Mariana Costa)!');
-    }
-
-    setTimeout(() => {
-      onClose();
-    }, 700);
-  };
-
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
@@ -91,139 +59,85 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
     setLoading(true);
 
     try {
-      // 1. Reconhecimento automático dos usuários de teste solicitados
-      if (email === 'gerente@teste.com') {
-        switchRole('manager');
-        setSuccessMsg('Conectado como Gerente da Clínica!');
-        setTimeout(() => onClose(), 600);
-        return;
-      }
-      if (email === 'superadmin@teste.com') {
-        switchRole('superadmin');
-        setSuccessMsg('Conectado como SuperAdmin da Plataforma!');
-        setTimeout(() => onClose(), 600);
-        return;
-      }
-      if (email === 'psicologo@teste.com') {
-        switchRole('psychologist');
-        setSuccessMsg('Conectado como Psicóloga Clínica!');
-        setTimeout(() => onClose(), 600);
-        return;
-      }
-      if (email === 'paciente@teste.com') {
-        switchRole('patient', 'pat-mariana-costa');
-        setSuccessMsg('Conectado como Paciente!');
-        setTimeout(() => onClose(), 600);
-        return;
+      if (!isSupabaseConfigured || !supabase) {
+        throw new Error('Serviço de autenticação Supabase não está configurado. Verifique as variáveis de ambiente.');
       }
 
-      if (isSupabaseConfigured && supabase) {
-        if (mode === 'login') {
-          const { data, error } = await supabase.auth.signInWithPassword({
-            email,
-            password,
-          });
-          if (error) throw error;
-          if (data.user) {
-            await loadLiveDataFromSupabase();
-          }
-          setSuccessMsg('Login realizado com sucesso! Carregando ambiente...');
-          setTimeout(() => {
-            onClose();
-          }, 800);
-        } else if (mode === 'register_psychologist') {
-          const { data, error } = await supabase.auth.signUp({
-            email,
-            password,
-            options: {
-              data: {
-                full_name: fullName,
-                role: 'psychologist',
-                crp_number: crpNumber,
-                crp_state: crpState,
-                approach,
-              }
-            }
-          });
-          if (error) throw error;
-
-          initializeNewPsychologistAccount({
-            fullName: fullName || 'Psicólogo(a)',
-            email,
-            crp: crpNumber || '06/000000',
-            crpState,
-            approach
-          });
-
-          if (data.user) {
-            await SupabaseService.ensureProfileAndPsychologist(data.user, {
-              full_name: fullName,
+      if (mode === 'login') {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: email.trim(),
+          password,
+        });
+        if (error) throw error;
+        if (data.user) {
+          await loadLiveDataFromSupabase();
+        }
+        setSuccessMsg('Login realizado com sucesso! Carregando seu consultório...');
+        setTimeout(() => {
+          onClose();
+        }, 800);
+      } else if (mode === 'register_psychologist') {
+        const { data, error } = await supabase.auth.signUp({
+          email: email.trim(),
+          password,
+          options: {
+            data: {
+              full_name: fullName.trim(),
               role: 'psychologist',
-              crp_number: crpNumber,
-              crp_state: crpState,
-              approach
-            });
-          }
-
-          setSuccessMsg(`Bem-vindo(a), ${fullName}! Seu consultório foi criado com sucesso.`);
-          setTimeout(() => {
-            onClose();
-          }, 900);
-        } else if (mode === 'register_patient') {
-          const { data, error } = await supabase.auth.signUp({
-            email,
-            password,
-            options: {
-              data: {
-                full_name: fullName,
-                role: 'patient',
-                invite_code: inviteCode,
-              }
+              crp_number: crpNumber.trim(),
+              crp_state: crpState.trim(),
+              approach,
             }
-          });
-          if (error) throw error;
-          switchRole('patient');
-          setSuccessMsg('Cadastro do paciente realizado com sucesso!');
-          setTimeout(() => {
-            onClose();
-          }, 900);
-        } else if (mode === 'forgot_password') {
-          const { error } = await supabase.auth.resetPasswordForEmail(email, {
-            redirectTo: `${window.location.origin}/reset-password`,
-          });
-          if (error) throw error;
-          setSuccessMsg('E-mail de recuperação enviado! Verifique sua caixa de entrada.');
-        }
-      } else {
-        if (mode === 'register_psychologist') {
-          initializeNewPsychologistAccount({
-            fullName: fullName || 'Psicólogo(a)',
-            email,
-            crp: crpNumber || '06/000000',
-            crpState,
+          }
+        });
+        if (error) throw error;
+
+        initializeNewPsychologistAccount({
+          fullName: fullName.trim() || 'Psicólogo(a)',
+          email: email.trim(),
+          crp: crpNumber.trim() || '06/000000',
+          crpState,
+          approach
+        });
+
+        if (data.user) {
+          await SupabaseService.ensureProfileAndPsychologist(data.user, {
+            full_name: fullName.trim(),
+            role: 'psychologist',
+            crp_number: crpNumber.trim(),
+            crp_state: crpState.trim(),
             approach
           });
-          setSuccessMsg(`Bem-vindo(a), ${fullName}! Conta criada com sucesso.`);
-          setTimeout(() => onClose(), 800);
-        } else if (mode === 'login') {
-          if (email.includes('gerente')) {
-            switchRole('manager');
-            setSuccessMsg('Conectado como Gerente da Clínica!');
-          } else if (email.includes('admin') || email.includes('super')) {
-            switchRole('superadmin');
-            setSuccessMsg('Conectado como SuperAdmin!');
-          } else if (email.includes('ana') || email.includes('psi') || !email.includes('paciente')) {
-            switchRole('psychologist');
-            setSuccessMsg('Conectado como Psicóloga!');
-          } else {
-            switchRole('patient');
-            setSuccessMsg('Conectado como Paciente!');
-          }
-          setTimeout(() => onClose(), 800);
-        } else {
-          setSuccessMsg('Conta criada com sucesso!');
-          setTimeout(() => onClose(), 800);
         }
+
+        setSuccessMsg(`Bem-vindo(a), ${fullName}! Seu consultório foi criado com sucesso.`);
+        setTimeout(() => {
+          onClose();
+        }, 900);
+      } else if (mode === 'register_patient') {
+        const { data, error } = await supabase.auth.signUp({
+          email: email.trim(),
+          password,
+          options: {
+            data: {
+              full_name: fullName.trim(),
+              role: 'patient',
+              invite_code: inviteCode.trim(),
+            }
+          }
+        });
+        if (error) throw error;
+        switchRole('patient');
+        setSuccessMsg('Cadastro de paciente realizado com sucesso!');
+        setTimeout(() => {
+          onClose();
+        }, 900);
+      } else if (mode === 'forgot_password') {
+        const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+          redirectTo: `${window.location.origin}/reset-password`,
+        });
+        if (error) throw error;
+        setSuccessMsg('E-mail de recuperação enviado! Verifique sua caixa de entrada.');
       }
     } catch (err: any) {
       setErrorMsg(err.message || 'Ocorreu um erro ao processar sua autenticação.');
@@ -248,79 +162,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
       description={
         isSupabaseConfigured
           ? 'Autenticação segura e criptografada via Supabase Auth.'
-          : 'Selecione uma conta de teste abaixo ou digite seu login.'
+          : 'Configuração do Supabase necessária para autenticação.'
       }
       maxWidth="lg"
     >
       <div className="space-y-4">
-        {/* ========================================================================= */}
-        {/* 1. SEÇÃO DE CONTAS DE TESTE PADRÃO (1-CLIQUE) */}
-        {/* ========================================================================= */}
-        {mode === 'login' && (
-          <div className="space-y-2 p-3.5 rounded-2xl bg-gradient-to-br from-slate-50 to-indigo-50/40 border border-slate-200">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                Acesso Rápido de Teste (1-Clique):
-              </span>
-              <span className="text-[10px] text-slate-500 font-medium">Credenciais preenchidas</span>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              {INITIAL_TEST_ACCOUNTS.map(acc => (
-                <button
-                  key={acc.email}
-                  type="button"
-                  onClick={() => handleQuickLogin(acc.email, acc.password, acc.role)}
-                  className="p-2.5 rounded-xl bg-white border border-slate-200/90 hover:border-indigo-400 hover:shadow-xs transition-all text-left flex items-start gap-2 group"
-                >
-                  <div
-                    className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 text-xs font-bold ${
-                      acc.role === 'patient'
-                        ? 'bg-teal-100 text-teal-800'
-                        : acc.role === 'psychologist'
-                        ? 'bg-purple-100 text-purple-800'
-                        : acc.role === 'manager'
-                        ? 'bg-indigo-100 text-indigo-800'
-                        : 'bg-amber-100 text-amber-900'
-                    }`}
-                  >
-                    {acc.role === 'patient' && <Heart className="w-3.5 h-3.5" />}
-                    {acc.role === 'psychologist' && <Brain className="w-3.5 h-3.5" />}
-                    {acc.role === 'manager' && <Building2 className="w-3.5 h-3.5" />}
-                    {acc.role === 'superadmin' && <Crown className="w-3.5 h-3.5" />}
-                  </div>
-
-                  <div className="min-w-0">
-                    <span className="font-bold text-xs text-slate-900 block truncate group-hover:text-indigo-600">
-                      {acc.role === 'patient'
-                        ? 'Paciente'
-                        : acc.role === 'psychologist'
-                        ? 'Psicólogo'
-                        : acc.role === 'manager'
-                        ? 'Gerente da Clínica'
-                        : 'SuperAdmin SaaS'}
-                    </span>
-                    <span className="text-[10px] text-slate-500 block truncate font-mono">
-                      {acc.email}
-                    </span>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
         {/* Status de Conexão com Supabase */}
         <div className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl border border-slate-200/80 text-xs">
           <div className="flex items-center gap-2">
-            <div className={`w-2 h-2 rounded-full ${isSupabaseConfigured ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
+            <div className={`w-2 h-2 rounded-full ${isSupabaseConfigured ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
             <span className="font-medium text-slate-700">
-              {isSupabaseConfigured ? 'Supabase Conectado' : 'Modo Demonstração Offline'}
+              {isSupabaseConfigured ? 'Supabase Conectado (Produção)' : 'Supabase Desconectado'}
             </span>
           </div>
           <Badge variant={isSupabaseConfigured ? 'success' : 'warning'} size="sm">
-            {isSupabaseConfigured ? 'Nuvem Ativa' : 'Local'}
+            {isSupabaseConfigured ? 'Nuvem Ativa' : 'Desconectado'}
           </Badge>
         </div>
 
@@ -352,7 +208,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                       type="text"
                       value={fullName}
                       onChange={e => setFullName(e.target.value)}
-                      placeholder="Ex: Dra. Ana Clara Martins"
+                      placeholder="Ex: Seu Nome Completo"
                       className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-slate-200 focus:ring-2 focus:ring-teal-500 focus:outline-none"
                       required
                     />

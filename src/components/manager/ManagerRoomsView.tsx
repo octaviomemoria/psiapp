@@ -23,7 +23,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Modal } from '@/components/ui/Modal';
 
 export const ManagerRoomsView: React.FC = () => {
-  const { clinicRooms, updateRoomStatus } = usePsi();
+  const { clinicRooms, clinicPsychologists, updateRoomStatus } = usePsi();
 
   const [selectedRoomForEdit, setSelectedRoomForEdit] = useState<ClinicRoom | null>(null);
   const [copiedRoomId, setCopiedRoomId] = useState<string | null>(null);
@@ -135,9 +135,9 @@ export const ManagerRoomsView: React.FC = () => {
                         variant="outline"
                         size="sm"
                         onClick={() => updateRoomStatus(room.id, 'occupied', {
-                          psychologist_name: 'Dra. Ana Martins',
-                          patient_initials: 'P.T.',
-                          until: '16:00'
+                          psychologist_name: clinicPsychologists[0]?.full_name || 'Psicólogo(a)',
+                          patient_initials: 'P.C.',
+                          until: '18:00'
                         })}
                         className="text-[11px] text-indigo-700 border-indigo-200 hover:bg-indigo-50"
                       >

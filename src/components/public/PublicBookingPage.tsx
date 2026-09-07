@@ -90,7 +90,7 @@ export const PublicBookingPage: React.FC<PublicBookingPageProps> = ({ isOpen, on
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
                   <h3 className="font-bold text-base text-white">
-                    {currentPsychologist.profile?.full_name || 'Dra. Ana Martins'}
+                    {currentPsychologist.profile?.full_name || 'Psicólogo(a) Responsável'}
                   </h3>
                   <Badge variant="purple" size="sm" className="bg-white/20 text-teal-200 border-none">
                     CRP {currentPsychologist.crp_number}/{currentPsychologist.crp_state}

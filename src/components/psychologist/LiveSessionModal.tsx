@@ -273,7 +273,7 @@ export const LiveSessionModal: React.FC<LiveSessionModalProps> = ({
                 <Badge variant="success">Em Atendimento</Badge>
               </div>
               <p className="text-xs text-slate-500">
-                Psicóloga: {currentPsychologist.profile?.display_name || 'Dra. Ana Martins'} ({currentPsychologist.crp_number}/{currentPsychologist.crp_state})
+                Psicólogo(a): {currentPsychologist.profile?.display_name || currentPsychologist.profile?.full_name || 'Profissional'} ({currentPsychologist.crp_number || '00/000000'}/{currentPsychologist.crp_state || 'UF'})
               </p>
             </div>
           </div>

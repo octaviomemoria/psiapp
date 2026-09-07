@@ -1,42 +1,74 @@
-# Plano de Ação & QA Completo - PsiApp Produção
+# Plano Diretor: Transformação do MVP em SaaS Clínico Premium de Produção
 
 ## Objetivo
-Corrigir todos os problemas de usabilidade, renderização de modais (portal), contraste de botões, persistência de sessões, autenticação Supabase e implementar um plano rigoroso de QA para 100% dos formulários, botões e fluxos em produção.
+Definir o roadmap técnico, de produto, de conformidade legal (CFP/LGPD) e de infraestrutura necessário para elevar o PsiApp de um MVP funcional para uma plataforma SaaS Premium, escalável, segura e pronta para comercialização em larga escala para clínicas e psicólogos autônomos.
 
 ---
 
-## 1. Correções Imediatas de UI / UX & Modais
-- [x] **Modal Portal (`src/components/ui/Modal.tsx`)**: Implementado `createPortal(..., document.body)` com `z-[9999]` para desvincular os modais de qualquer container com `backdrop-filter` ou `transform` (como a `glass-header`), garantindo que o modal de Login/Cadastro abra centralizado, espaçoso e 100% visível em qualquer resolução.
-- [x] **Contraste dos Botões do Banner (`src/components/psychologist/DashboardView.tsx`)**: Substituídas classes conflitantes nos botões "Convidar Paciente" e "Registrar Sessão" para garantir contraste perfeito no fundo escuro com estilo translúcido premium (`bg-white/15 text-white border-white/25 hover:bg-white/25 backdrop-blur-sm`).
-- [x] **Feedback e Persistência de Sessões (`src/components/psychologist/SessionFormModal.tsx` & `LiveSessionModal.tsx`)**: Adicionada notificação de confirmação (`addNotification`) e garantido que `addSession` e `updateSession` atualizem o estado reativo e o banco Supabase em tempo real.
-- [x] **Fluxo de Autenticação / Modo Produção (`src/components/auth/AuthModal.tsx` & `src/lib/store/psi-context.tsx`)**: Modal de autenticação integrado com cadastro completo de psicóloga (incluindo CRP, UF e Abordagem Teórica) e login seguro com Supabase Auth.
+## Fases do Roadmap
+
+### Fase 1: Arquitetura, Roteamento & Refatoração de Estado (Fundação Sólida)
+- [ ] **Descentralização do `page.tsx` para Next.js App Router Nativo**:
+  - Criar grupos de rotas com layouts dedicados: `app/(auth)/...`, `app/(psicologo)/...`, `app/(paciente)/...`, `app/(clinica)/...`, `app/(admin)/...`.
+  - Permitir deep linking real e navegação por URL (`/psicologo/pacientes/[id]`, `/paciente/diario`, etc.).
+- [ ] **Migração do Estado Monolítico (`psi-context.tsx`) para TanStack Query + Zustand**:
+  - Separar estado de servidor (cache, sincronização, revalidação e paginação no PostgreSQL) de estado de interface (modais, filtros, menus).
+  - Implementar paginação e busca no lado do servidor (eliminar carregamento de dados maciços em memória).
+- [ ] **Edge Middleware para Segurança de Sessão**:
+  - `middleware.ts` com validação de tokens JWT do Supabase antes de entregar qualquer página privada.
+  - Bloqueio de acesso entre papéis (ex: paciente tentando acessar rotas de psicólogo ou gerente).
+
+### Fase 2: Segurança Nível Saúde, Auditoria CFP & Criptografia
+- [ ] **Criptografia de Dados Sensíveis de Prontuário**:
+  - Criptografia em repouso das anotações confidenciais (`session_private_notes`) e relatos íntimos de diário com Envelope Encryption ou Web Crypto.
+- [ ] **Trilha de Auditoria Imutável (CFP 001/2009 e 004/2020)**:
+  - Tabela append-only com trigger no banco registrando data/hora, IP, ID do profissional e ação para qualquer leitura, alteração ou exclusão de prontuário.
+- [ ] **Autenticação Segura & MFA (Multi-Factor Authentication)**:
+  - Ativação de 2FA via TOTP (Google Authenticator) obrigatório para profissionais de saúde.
+  - Eliminar atalhos de "demo_mode" do bundle de produção pública, isolando-os em ambiente de staging/sandbox.
+- [ ] **Assinatura Digital de Documentos Clínicos**:
+  - Geração de laudos, relatórios e atestados com padrão PDF/A e assinatura com certificado digital (ICP-Brasil / PAdES / e-CPF).
+
+### Fase 3: Telepsicologia Nativa & Comunicação Integrada (CFP 009/2024)
+- [ ] **Sala de Teleconsulta Integrada (WebRTC via LiveKit / Daily.co)**:
+  - Chamadas de vídeo criptografadas ponto a ponto embutidas no próprio app (sem depender de abrir abas de terceiros como Google Meet).
+  - Sala de espera virtual ("Aguardando o paciente entrar"), teste de câmera/microfone antes da sessão.
+  - Modo "Foco Clínico": tela dividida com prontuário SOAP e anotações à esquerda e vídeo do paciente à direita.
+  - Botão de emergência na sala de chamada para encerramento imediato seguro.
+- [ ] **Mensageria Segura In-App**:
+  - Canal de recados e avisos com definição clara de horário de atendimento clínico (evita invasão do WhatsApp pessoal fora do expediente).
+
+### Fase 4: Monetização, Faturamento SaaS & Cobrança de Pacientes
+- [ ] **Billing SaaS de Assinaturas (Stripe ou Asaas)**:
+  - Checkout transparente de planos (Autônomo, Clínica Pro, Enterprise).
+  - Portal do cliente para autogestão de assinaturas, upgrade, downgrade, nota fiscal e histórico de faturas.
+  - Webhooks de ativação/bloqueio automático de acesso por inadimplência (Dunning management).
+- [ ] **Módulo de Cobrança de Sessões para o Paciente**:
+  - Cobrança de consultas via Pix Dinâmico e Cartão de Crédito direto no portal do paciente.
+  - Split de pagamento automático para a conta do psicólogo ou da clínica.
+  - Emissão automática de recibo e nota fiscal após confirmação do webhook bancário.
+
+### Fase 5: Experiência Mobile Nativa (iOS e Android)
+- [ ] **Build Nativo via Capacitor / Ionic**:
+  - Empacotamento de binários nativos para App Store e Google Play.
+  - Suporte a Biometria (FaceID / TouchID / Impressão Digital) para desbloqueio rápido e seguro do app.
+  - Push Notifications automáticas para lembretes de sessão, check-in diário de humor e novas atividades prescritas.
+  - Modo Offline para o paciente (registro de diário/humor sem internet com sincronização posterior).
+
+### Fase 6: Engenharia de Confiabilidade, Testes & Observabilidade
+- [ ] **Suíte de Testes Automatizados**:
+  - Testes unitários com Vitest para regras de negócio (cálculo de escores psicométricos PHQ-9/GAD-7, recibos, RLS).
+  - Testes E2E com Playwright para fluxos essenciais (login, criação de sessão, envio de diário, pagamento).
+- [ ] **Observabilidade em Produção**:
+  - Integração com Sentry para rastreamento de erros e exceções em tempo real.
+  - PostHog / Plausible para telemetria de produto estritamente anônima (sem envio de dados sensíveis de saúde).
+  - Rotina de Backups automatizados do PostgreSQL com Point-in-Time Recovery (PITR).
 
 ---
 
-## 2. Revisão e Auditoria de Formulários, Botões e Links
-- [x] **Formulário de Sessão (`SessionFormModal.tsx` & `LiveSessionModal.tsx`)**: Validação de campos obrigatórios (paciente, data, tópicos, SOAP), contagem de tempo, anotações de sigilo e persistência garantida.
-- [x] **Formulário de Pacientes (`PatientListView.tsx`)**: Validação de nome, e-mail, telefone, data de nascimento, contato de emergência e cálculo de idade.
-- [x] **Formulário de Convite de Paciente (`PatientInviteModal.tsx` & `page.tsx`)**: Geração de token criptografado, link copiável, integração com WhatsApp Web e detecção automática via `?invite=token`.
-- [x] **Formulário de Objetivos / Metas (`PatientDetailView.tsx`)**: Adição de metas terapêuticas com vínculo dinâmico do psicólogo (`currentPsychologist.id`), status e barra de progresso (0-100%).
-- [x] **Formulário de Exercícios Terapêuticos (`ExerciseBuilderModal.tsx`)**: Construtor dinâmico de campos (texto, escala, múltipla escolha), instruções e atribuição direta.
-- [x] **Formulário de Escalas Psicométricas (`PsychometricScalesModal.tsx`)**: PHQ-9 e GAD-7 com escore automático, classificação de gravidade e alerta de risco.
-- [x] **Formulário Financeiro & Recibos (`FinancialModal.tsx`)**: Controle de pagamentos (Pix/Cartão/Convênio) e geração de recibo CFP para impressão/PDF.
-- [x] **Formulários do Paciente (`BetweenSessionsHub.tsx`, `DiaryView.tsx`, `PatientHomeView.tsx`)**: Diário emocional com trava de privacidade (LGPD), check-in de humor (1-5) e player de âncoras de voz.
+## Critérios de Sucesso para "Produção Premium"
+1. **LTV e Retenção do Psicólogo:** O terapeuta utiliza o sistema diariamente como sua principal ferramenta de trabalho e prontuário legal.
+2. **Zero Fricção para o Paciente:** O paciente baixa o app pelo link do convite, faz login biometria e realiza os exercícios entre sessões com prazer estético e acolhimento.
+3. **Auditabilidade Total:** 100% de conformidade com exigências éticas do CFP e jurídicas da LGPD.
+4. **Auto-sustentabilidade Financeira:** Fluxo de pagamento e cobrança de assinaturas 100% automatizado, sem intervenção manual.
 
----
-
-## 3. Matriz de Testes de QA (Execução Passo a Passo)
-- [x] **QA 01 - Autenticação & Cadastro**: Cadastro de nova psicóloga com CRP e abordagem teórica, login, logout e modo nuvem.
-- [x] **QA 02 - Banner & Navegação**: Visibilidade dos botões do dashboard, troca de abas (Dashboard, Agenda, Pacientes, Biblioteca, Financeiro).
-- [x] **QA 03 - Gestão de Pacientes & Convites**: Cadastro manual de paciente, geração de convite WhatsApp, abertura de prontuário 360°.
-- [x] **QA 04 - Atendimento Clínico & Sessões**: Início de sessão ao vivo (50min com alertas a 40min e 48min), preenchimento SOAP com IA, registro de notas privadas, registro manual de sessão com notificação.
-- [x] **QA 05 - Escalas & Ferramentas Clínicas**: Aplicação de PHQ-9/GAD-7, conceituação cognitiva TCC/ACT, âncoras de áudio.
-- [x] **QA 06 - Visão do Paciente (Entre Sessões)**: Registro de humor diário, diário reflexivo privado vs compartilhado, execução de exercícios atribuídos.
-- [x] **QA 07 - Financeiro & Recibos**: Emissão de recibo profissional com numeração e dados de CRP.
-
----
-
-## 4. Build, Validação de Tipos & Deploy
-- [x] Executado `npm run build` localmente com 0 erros de TypeScript e Next.js.
-- [x] Commit e push realizados para o GitHub `main` disparando deploy na Vercel (`https://psiapp-chi.vercel.app`).
-- [x] Validação completa no navegador e documentação registrada no `walkthrough.md`.

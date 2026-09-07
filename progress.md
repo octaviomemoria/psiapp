@@ -28,3 +28,13 @@
   - `SleepDiaryModal.tsx` (Diário matinal de sono)
 - [x] Testes de build de produção (`npm run build`) executados com sucesso absoluto (Exit Code 0).
 - [x] Criação do `README.md` e `walkthrough.md`.
+
+## Sessão: 07/09/2026 — Expurgamento Total de Dados Mockados & Conexão Supabase Live
+- [x] Eliminação completa de todos os dados fictícios e coleções mockadas em `initial-data.ts`.
+- [x] Remoção da seção e botões de login rápido (1-clique com credenciais de teste) do `AuthModal.tsx`.
+- [x] Remoção de desvios e atalhos de e-mails fake em `AuthModal.tsx` — autenticação 100% via Supabase Auth real.
+- [x] Atualização de `psi-context.tsx` para operar por padrão em `supabase_live` com armazenamento limpo `v4`.
+- [x] Remoção do alternador "Modo Demo" e diálogo de restauração de dados fictícios do `Header.tsx`.
+- [x] Varredura e substituição de strings hardcoded de demonstração ("Dra. Ana Martins", "Mariana Costa", "teste.com") em todos os 15 componentes do ecossistema.
+- [x] Validação completa de compilação: `npm run build` executado com êxito absoluto (código 0).
+

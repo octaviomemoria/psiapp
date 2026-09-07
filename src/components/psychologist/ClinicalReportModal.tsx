@@ -74,13 +74,13 @@ export const ClinicalReportModal: React.FC<ClinicalReportModalProps> = ({
           {/* Cabeçalho Oficial */}
           <div className="text-center border-b border-slate-300 pb-4 space-y-1">
             <h2 className="text-lg font-bold uppercase tracking-wider text-slate-900 font-sans">
-              {currentPsychologist.profile?.full_name || 'Dra. Ana Martins'}
+              {currentPsychologist.profile?.full_name || 'Consultório de Psicologia'}
             </h2>
             <p className="text-xs text-slate-600 font-sans">
-              Psicóloga Clínica • CRP {currentPsychologist.crp_number}/{currentPsychologist.crp_state}
+              Psicologia Clínica • CRP {currentPsychologist.crp_number || '00/000000'}/{currentPsychologist.crp_state || 'UF'}
             </p>
             <p className="text-[11px] text-slate-500 font-sans">
-              {currentPsychologist.approach} • Telefone: {currentPsychologist.profile?.phone || '(11) 98765-4321'}
+              {currentPsychologist.approach} {currentPsychologist.profile?.phone ? `• Telefone: ${currentPsychologist.profile.phone}` : ''}
             </p>
           </div>
 
@@ -166,9 +166,9 @@ export const ClinicalReportModal: React.FC<ClinicalReportModalProps> = ({
           {/* Assinatura Profissional */}
           <div className="pt-12 text-center font-sans space-y-1">
             <div className="w-64 h-px bg-slate-400 mx-auto mb-2" />
-            <p className="font-bold text-slate-900">{currentPsychologist.profile?.full_name || 'Dra. Ana Martins'}</p>
+            <p className="font-bold text-slate-900">{currentPsychologist.profile?.full_name || 'Psicólogo(a) Responsável'}</p>
             <p className="text-xs text-slate-600">
-              Psicóloga Clínica • CRP {currentPsychologist.crp_number}/{currentPsychologist.crp_state}
+              Psicologia Clínica • CRP {currentPsychologist.crp_number || '00/000000'}/{currentPsychologist.crp_state || 'UF'}
             </p>
           </div>
         </div>

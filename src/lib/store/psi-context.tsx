@@ -177,14 +177,14 @@ interface PsiContextType {
 
 const PsiContext = createContext<PsiContextType | undefined>(undefined);
 
-const LOCAL_STORAGE_KEY = 'psiapp_state_v3';
-const DATA_SOURCE_KEY = 'psiapp_data_source_v1';
+const LOCAL_STORAGE_KEY = 'psiapp_state_v4';
+const DATA_SOURCE_KEY = 'psiapp_data_source_v2';
 
 export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [authUser, setAuthUser] = useState<SupabaseUser | null>(null);
   const [authProfile, setAuthProfile] = useState<UserProfile | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
-  const [activeDataSource, setActiveDataSource] = useState<'supabase_live' | 'demo_mode'>('demo_mode');
+  const [activeDataSource, setActiveDataSource] = useState<'supabase_live' | 'demo_mode'>('supabase_live');
 
   const [currentRole, setCurrentRole] = useState<UserRole>('psychologist');
   const [currentPsychologist, setCurrentPsychologist] = useState<Psychologist>(INITIAL_PSYCHOLOGIST);
@@ -218,10 +218,11 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const resetToDemoData = useCallback(() => {
     if (typeof window !== 'undefined') {
-      localStorage.setItem(DATA_SOURCE_KEY, 'demo_mode');
+      localStorage.setItem(DATA_SOURCE_KEY, 'supabase_live');
       localStorage.removeItem(LOCAL_STORAGE_KEY);
+      localStorage.removeItem('psiapp_state_v3');
     }
-    setActiveDataSource('demo_mode');
+    setActiveDataSource('supabase_live');
     setAuthUser(null);
     setAuthProfile(null);
     setCurrentRole('psychologist');
@@ -247,7 +248,7 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setSaasPlans(INITIAL_SAAS_PLANS);
     setSaasTenants(INITIAL_SAAS_TENANTS);
     setPlatformLogs(INITIAL_PLATFORM_LOGS);
-    setCurrentPatientId(INITIAL_PATIENTS[0]?.id || '');
+    setCurrentPatientId('');
   }, []);
 
   // Carregar dados reais do Supabase para o usuário autenticado
@@ -423,7 +424,7 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         await loadLiveDataFromSupabase();
       } else {
         if (event === 'SIGNED_OUT') {
-          setActiveDataSource('demo_mode');
+          setActiveDataSource('supabase_live');
           resetToDemoData();
         }
       }
@@ -595,9 +596,9 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     setAuthUser(null);
     setAuthProfile(null);
-    setActiveDataSource('demo_mode');
+    setActiveDataSource('supabase_live');
     resetToDemoData();
-  }, []);
+  }, [resetToDemoData]);
 
   const addNotification = useCallback((notificationData: Omit<InAppNotification, 'id' | 'created_at'>) => {
     const newNotification: InAppNotification = {

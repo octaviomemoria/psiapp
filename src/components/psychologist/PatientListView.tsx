@@ -361,7 +361,7 @@ export const PatientListView: React.FC<PatientListViewProps> = ({ onSelectPatien
                 type="text"
                 value={fullName}
                 onChange={e => setFullName(e.target.value)}
-                placeholder="Ex: Mariana Costa"
+                placeholder="Ex: Nome do Paciente"
                 className="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 focus:ring-2 focus:ring-teal-500 focus:outline-none"
                 required
               />

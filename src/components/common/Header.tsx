@@ -6,7 +6,6 @@ import {
   Sparkles,
   Users,
   UserCheck,
-  RotateCcw,
   ShieldCheck,
   ChevronDown,
   Brain,
@@ -38,19 +37,15 @@ export const Header: React.FC = () => {
     authUser,
     authProfile,
     isLiveProduction,
-    activeDataSource,
-    toggleDataSource,
     signOut,
     currentRole,
     currentPsychologist,
     currentPatient,
     patients,
     switchRole,
-    resetToDemoData,
   } = usePsi();
 
   const [isLgpdModalOpen, setIsLgpdModalOpen] = useState(false);
-  const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isBiometricOpen, setIsBiometricOpen] = useState(false);
   const [isContractOpen, setIsContractOpen] = useState(false);
@@ -69,22 +64,16 @@ export const Header: React.FC = () => {
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-bold text-lg text-slate-800 tracking-tight">PsiApp</span>
-                {isLiveProduction ? (
-                  <Badge variant="success" size="sm" className="hidden sm:inline-flex bg-emerald-50 text-emerald-700 border-emerald-200">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1 animate-pulse" />
-                    Produção Live
-                  </Badge>
-                ) : (
-                  <Badge variant="default" size="sm" className="hidden sm:inline-flex bg-amber-50 text-amber-800 border-amber-200">
-                    Modo Demo
-                  </Badge>
-                )}
+                <Badge variant="success" size="sm" className="hidden sm:inline-flex bg-emerald-50 text-emerald-700 border-emerald-200">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1 animate-pulse" />
+                  Supabase Live
+                </Badge>
               </div>
               <p className="text-[11px] text-slate-500 hidden md:block">Acompanhamento Terapêutico & Evolução Clínica</p>
             </div>
           </div>
 
-          {/* Seletor de Perfil / Demo Switcher / Conta */}
+          {/* Seletor de Perfil & Conta */}
           <div className="flex items-center gap-2 sm:gap-3">
             {/* Seletor de Perfil & Papel */}
             <div className="flex items-center bg-slate-100/90 p-1 rounded-xl border border-slate-200">
@@ -100,7 +89,7 @@ export const Header: React.FC = () => {
                 title="Visualização do Consultório do Psicólogo"
               >
                 <UserCheck className="w-3.5 h-3.5" />
-                <span className="hidden lg:inline">Psicóloga</span>
+                <span className="hidden lg:inline">Psicólogo(a)</span>
               </button>
 
               {/* 2. Paciente */}
@@ -124,7 +113,7 @@ export const Header: React.FC = () => {
                 {patients.length > 0 && (
                   <div className="absolute right-0 mt-1 w-56 bg-white rounded-xl shadow-dropdown border border-slate-100 py-1 hidden group-hover:block z-50">
                     <div className="px-3 py-1.5 text-[11px] font-medium text-slate-400 uppercase tracking-wider">
-                      {isLiveProduction ? 'Meus Pacientes (Supabase):' : 'Alternar Paciente Demo:'}
+                      Meus Pacientes:
                     </div>
                     {patients.map(patient => (
                       <button
@@ -194,20 +183,12 @@ export const Header: React.FC = () => {
                 </button>
                 <div className="absolute right-0 mt-1 w-64 bg-white rounded-xl shadow-dropdown border border-slate-100 py-2 hidden group-hover:block z-50">
                   <div className="px-4 py-2 border-b border-slate-100">
-                    <p className="text-xs font-bold text-slate-800 truncate">{authProfile?.display_name || authProfile?.full_name || 'Consultório Ativo'}</p>
+                    <p className="text-xs font-bold text-slate-800 truncate">{authProfile?.display_name || authProfile?.full_name || 'Meu Consultório'}</p>
                     <p className="text-[11px] text-slate-500 truncate">{authProfile?.email || authUser?.email}</p>
                     <Badge variant="success" size="sm" className="mt-1">
-                      {isLiveProduction ? 'Conectado ao Supabase' : 'Consultório Criado'}
+                      Conectado ao Supabase
                     </Badge>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => toggleDataSource('demo_mode')}
-                    className="w-full text-left px-4 py-2 text-xs text-slate-700 hover:bg-slate-50 flex items-center gap-2"
-                  >
-                    <Database className="w-3.5 h-3.5 text-amber-600" />
-                    <span>Ver em Modo Demo</span>
-                  </button>
                   <button
                     type="button"
                     onClick={() => signOut()}
@@ -284,18 +265,6 @@ export const Header: React.FC = () => {
               <ShieldCheck className="w-3.5 h-3.5 text-teal-600 mr-1" />
               LGPD & Sigilo
             </Button>
-
-            {!isLiveProduction && (
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setIsResetConfirmOpen(true)}
-                className="text-slate-400 hover:text-slate-600"
-                title="Restaurar dados iniciais de demonstração"
-              >
-                <RotateCcw className="w-4 h-4" />
-              </Button>
-            )}
           </div>
         </div>
       </div>
@@ -340,36 +309,6 @@ export const Header: React.FC = () => {
         </div>
       </Modal>
 
-      {/* Confirmação de Reset de Dados Demo */}
-      <Modal
-        isOpen={isResetConfirmOpen}
-        onClose={() => setIsResetConfirmOpen(false)}
-        title="Restaurar Dados de Exemplo?"
-        description="Isso restaurará os dados de demonstração originais com pacientes fictícios."
-        maxWidth="sm"
-      >
-        <div className="space-y-4 text-xs text-slate-600">
-          <p>
-            Ao confirmar, todos os dados modificados localmente serão reiniciados para o estado padrão do MVP.
-          </p>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" size="sm" onClick={() => setIsResetConfirmOpen(false)}>
-              Cancelar
-            </Button>
-            <Button
-              variant="danger"
-              size="sm"
-              onClick={() => {
-                resetToDemoData();
-                setIsResetConfirmOpen(false);
-              }}
-            >
-              Sim, Restaurar
-            </Button>
-          </div>
-        </div>
-      </Modal>
-
       {/* Modal de Bloqueio por PIN / Biometria */}
       <BiometricLockModal
         isOpen={isBiometricOpen}
@@ -380,8 +319,8 @@ export const Header: React.FC = () => {
       <TherapeuticContractModal
         isOpen={isContractOpen}
         onClose={() => setIsContractOpen(false)}
-        patientName={currentPatient?.full_name || 'Mariana Costa'}
-        psychologistName={`${currentPsychologist.profile?.full_name || 'Dra. Ana Martins'} (CRP ${currentPsychologist.crp_number}/${currentPsychologist.crp_state})`}
+        patientName={currentPatient?.full_name || 'Paciente'}
+        psychologistName={currentPsychologist.profile?.full_name ? `${currentPsychologist.profile.full_name} (CRP ${currentPsychologist.crp_number}/${currentPsychologist.crp_state})` : 'Psicólogo(a)'}
       />
 
       {/* Página Pública de Agendamento (Bio Link) */}

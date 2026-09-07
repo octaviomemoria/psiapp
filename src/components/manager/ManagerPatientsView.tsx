@@ -62,7 +62,7 @@ export const ManagerPatientsView: React.FC = () => {
       birth_date: birthDate,
       gender,
       status: 'active',
-      clinical_notes_overview: `Paciente institucional acolhido na clínica. Terapeuta de referência: ${assignedPsico?.full_name || 'Dra. Ana Martins'}.`
+      clinical_notes_overview: `Paciente institucional acolhido na clínica. Terapeuta de referência: ${assignedPsico?.full_name || 'Psicólogo(a) Titular'}.`
     });
 
     setIsAddPatientOpen(false);
@@ -175,7 +175,7 @@ export const ManagerPatientsView: React.FC = () => {
                         ? patient.clinical_notes_overview.split('Transferido para ')[1]?.split(' em ')[0]
                         : (patient.clinical_notes_overview?.includes('Terapeuta de referência: ')
                             ? patient.clinical_notes_overview.split('Terapeuta de referência: ')[1]?.split('.')[0]
-                            : 'Dra. Ana Martins');
+                            : 'Psicólogo(a) Titular');
                       return (
                         <span className="inline-flex items-center gap-1 font-semibold text-indigo-700 bg-indigo-50 px-2 py-1 rounded-lg border border-indigo-100 text-[11px]">
                           {assignedName}

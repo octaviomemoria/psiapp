@@ -33,11 +33,11 @@ interface WhatsAppReminderModalProps {
 export const WhatsAppReminderModal: React.FC<WhatsAppReminderModalProps> = ({
   isOpen,
   onClose,
-  patientName = 'Mariana Costa',
-  patientPhone = '(11) 98765-4321',
-  sessionDate = '2026-08-31',
-  sessionTime = '14:00',
-  psychologistName = 'Dra. Ana Martins',
+  patientName = 'Paciente',
+  patientPhone = '',
+  sessionDate = new Date().toISOString().split('T')[0],
+  sessionTime = '09:00',
+  psychologistName = 'Psicólogo(a)',
   sessionLink,
   appointmentId
 }) => {

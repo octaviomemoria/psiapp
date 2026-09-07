@@ -28,24 +28,12 @@ export const SafetyPlanModal: React.FC<SafetyPlanModalProps> = ({ isOpen, onClos
   const [currentStep, setCurrentStep] = useState(1);
 
   // Estados dos 6 passos de Stanley-Brown
-  const [warningSigns, setWarningSigns] = useState(
-    'Isolamento no quarto, pensamentos repetitivos de que "não tenho saída", taquicardia forte e parar de responder mensagens.'
-  );
-  const [internalCoping, setInternalCoping] = useState(
-    'Técnica de ancoragem sensorial 5-4-3-2-1, respiração 4-7-8, tomar banho frio e ouvir a playlist de acolhimento.'
-  );
-  const [socialDistraction, setSocialDistraction] = useState(
-    'Ir ao parque caminhar com o cachorro, ir a uma cafeteria movimentada, ligar para um amigo sobre filmes.'
-  );
-  const [supportContacts, setSupportContacts] = useState(
-    'Mãe (11 98888-1111) ou Amiga Clara (11 97777-2222).'
-  );
-  const [professionals, setProfessionals] = useState(
-    'Dra. Ana Martins - Psicóloga (11 99999-8888) | CVV: 188 (24h gratuito) | SAMU: 192.'
-  );
-  const [safeEnvironment, setSafeEnvironment] = useState(
-    'Guardar remédios trancados no armário sob chave com familiar, evitar ficar sozinho em momentos de pico de angústia.'
-  );
+  const [warningSigns, setWarningSigns] = useState('');
+  const [internalCoping, setInternalCoping] = useState('');
+  const [socialDistraction, setSocialDistraction] = useState('');
+  const [supportContacts, setSupportContacts] = useState('');
+  const [professionals, setProfessionals] = useState('CVV: 188 (Ligação gratuita 24h) | SAMU: 192 | UPA mais próxima');
+  const [safeEnvironment, setSafeEnvironment] = useState('');
 
   const [savedSuccess, setSavedSuccess] = useState(false);
 
