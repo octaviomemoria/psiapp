@@ -1,0 +1,43 @@
+name: Supabase Keep-Alive Ping
+
+on:
+  schedule:
+    # Executa todos os dias às 12:00 UTC (09:00 BRT)
+    - cron: '0 12 * * *'
+  workflow_dispatch: # Permite disparar manualmente pela aba Actions do GitHub
+
+jobs:
+  ping-supabase:
+    name: Ping Supabase Database
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase REST API
+        env:
+          SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL || secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY || secrets.SUPABASE_ANON_KEY }}
+        run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_KEY" ]; then
+            echo "::error::As secrets do Supabase (NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_ANON_KEY) não estão configuradas no repositório."
+            exit 1
+          fi
+
+          # Remove barra final da URL se houver
+          CLEAN_URL="${SUPABASE_URL%/}"
+
+          echo "Enviando ping para o Supabase REST API em $CLEAN_URL/rest/v1/ ..."
+          
+          # Realiza a requisição ao PostgREST (banco de dados)
+          HTTP_STATUS=$(curl -s -o response.json -w "%{http_code}" \
+            -X GET "$CLEAN_URL/rest/v1/" \
+            -H "apikey: $SUPABASE_KEY" \
+            -H "Authorization: Bearer $SUPABASE_KEY")
+
+          echo "HTTP Status retornado: $HTTP_STATUS"
+
+          if [ "$HTTP_STATUS" -ge 200 ] && [ "$HTTP_STATUS" -lt 400 ]; then
+            echo "Ping realizado com sucesso! Banco de dados mantido ativo."
+          else
+            echo "::warning::Status retornado inesperado ($HTTP_STATUS). Verifique a resposta da API."
+            cat response.json
+            exit 1
+          fi
