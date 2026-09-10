@@ -11,33 +11,45 @@ jobs:
     name: Ping Supabase Database
     runs-on: ubuntu-latest
     steps:
-      - name: Ping Supabase REST API
+      - name: Ping Supabase REST & Auth APIs
         env:
           SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL || secrets.SUPABASE_URL }}
-          SUPABASE_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY || secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY || secrets.SUPABASE_ANON_KEY }}
         run: |
           if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_KEY" ]; then
-            echo "::error::As secrets do Supabase (NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_ANON_KEY) não estão configuradas no repositório."
+            echo "::error::As credenciais do Supabase não foram encontradas nas Secrets do GitHub."
             exit 1
           fi
 
           # Remove barra final da URL se houver
           CLEAN_URL="${SUPABASE_URL%/}"
 
-          echo "Enviando ping para o Supabase REST API em $CLEAN_URL/rest/v1/ ..."
-          
-          # Realiza a requisição ao PostgREST (banco de dados)
+          echo "1. Enviando ping para o endpoint PostgREST ($CLEAN_URL/rest/v1/) ..."
           HTTP_STATUS=$(curl -s -o response.json -w "%{http_code}" \
             -X GET "$CLEAN_URL/rest/v1/" \
             -H "apikey: $SUPABASE_KEY" \
             -H "Authorization: Bearer $SUPABASE_KEY")
 
-          echo "HTTP Status retornado: $HTTP_STATUS"
+          echo "HTTP Status (PostgREST): $HTTP_STATUS"
 
           if [ "$HTTP_STATUS" -ge 200 ] && [ "$HTTP_STATUS" -lt 400 ]; then
-            echo "Ping realizado com sucesso! Banco de dados mantido ativo."
+            echo "✓ PostgREST ping bem-sucedido! Banco de dados ativo."
           else
-            echo "::warning::Status retornado inesperado ($HTTP_STATUS). Verifique a resposta da API."
+            echo "::warning::Falha no PostgREST ($HTTP_STATUS). Tentando endpoint de Health..."
             cat response.json
+          fi
+
+          echo "2. Enviando ping para o endpoint Auth Health ($CLEAN_URL/auth/v1/health) ..."
+          AUTH_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X GET "$CLEAN_URL/auth/v1/health" \
+            -H "apikey: $SUPABASE_KEY")
+
+          echo "HTTP Status (Auth Health): $AUTH_STATUS"
+
+          if [ "$HTTP_STATUS" -ge 200 ] && [ "$HTTP_STATUS" -lt 400 ] || [ "$AUTH_STATUS" -ge 200 ] && [ "$AUTH_STATUS" -lt 400 ]; then
+            echo "✓ Keep-Alive executado com sucesso! Supabase mantido ativo."
+            exit 0
+          else
+            echo "::error::Não foi possível conectar ao Supabase."
             exit 1
           fi
