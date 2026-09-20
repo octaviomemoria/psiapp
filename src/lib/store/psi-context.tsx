@@ -223,6 +223,21 @@ interface PsiContextType {
 const PsiContext = createContext<PsiContextType | undefined>(undefined);
 
 const LOCAL_STORAGE_KEY = 'psiapp_state_v4';
+
+// Por quanto tempo um registro recém-gravado é preservado caso um recarregamento em tempo real leia o banco antes do commit.
+const RECENT_WINDOW_MS = 2 * 60 * 1000;
+
+// Paciente "vazio" exibido quando não há nenhum selecionado. Constante de módulo: uma referência estável
+// (um objeto novo a cada render fazia 13 callbacks do contexto serem recriados a cada render).
+const NO_PATIENT_SELECTED: Patient = {
+  id: 'pat-default',
+  full_name: 'Nenhum paciente selecionado',
+  email: '',
+  phone: '',
+  birth_date: '',
+  status: 'active',
+  started_at: new Date().toISOString(),
+};
 const DATA_SOURCE_KEY = 'psiapp_data_source_v2';
 
 export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -270,7 +285,6 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const isLiveProduction = activeDataSource === 'supabase_live' || Boolean(authUser);
 
   // Registros gravados há pouco: protegem contra um recarregamento em tempo real que tenha lido o banco antes do commit.
-  const RECENT_WINDOW_MS = 2 * 60 * 1000;
   const recentSessionsRef = useRef<Map<string, { item: TherapySession; at: number }>>(new Map());
   const recentPatientsRef = useRef<Map<string, { item: Patient; at: number }>>(new Map());
 
@@ -697,14 +711,10 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     activeDataSource
   ]);
 
-  const currentPatient = patients.find(p => p.id === currentPatientId) || patients[0] || {
-    id: 'pat-default',
-    full_name: 'Nenhum paciente selecionado',
-    email: '',
-    phone: '',
-    status: 'active' as const,
-    started_at: new Date().toISOString()
-  };
+  const currentPatient = useMemo(
+    () => patients.find(p => p.id === currentPatientId) || patients[0] || NO_PATIENT_SELECTED,
+    [patients, currentPatientId]
+  );
 
   const switchRole = useCallback((role: UserRole, patientId?: string) => {
     setCurrentRole(role);
@@ -724,7 +734,7 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } else {
       loadLiveDataFromSupabase();
     }
-  }, [loadLiveDataFromSupabase]);
+  }, [loadLiveDataFromSupabase, resetToDemoData]);
 
   const signOut = useCallback(async () => {
     if (isSupabaseConfigured && supabase) {
@@ -1018,13 +1028,14 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }, ...prev]);
   }, []);
 
-  const buildAppointment = (data: Omit<Appointment, 'id'>, overrides: Partial<Appointment> = {}): Appointment => ({
+  const defaultSessionPrice = currentPsychologist.session_default_price;
+  const buildAppointment = useCallback((data: Omit<Appointment, 'id'>, overrides: Partial<Appointment> = {}): Appointment => ({
     ...data,
     id: newUuid(),
-    price: data.price || currentPsychologist.session_default_price || 220,
+    price: data.price || defaultSessionPrice || 220,
     payment_status: data.payment_status || 'pending',
     ...overrides,
-  });
+  }), [defaultSessionPrice]);
 
   const addAppointment = useCallback(async (appointmentData: Omit<Appointment, 'id'>): Promise<WriteResult<Appointment>> => {
     const newAppointment = buildAppointment(appointmentData);
@@ -1038,7 +1049,7 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { ok: false, error: result.error };
     }
     return { ok: true, data: newAppointment };
-  }, [isLiveProduction, currentPsychologist, pushErrorNotification]);
+  }, [isLiveProduction, buildAppointment, pushErrorNotification]);
 
   /** Cria a série inteira de uma vez (mesmo series_id): ou todas as ocorrências são gravadas ou nenhuma. */
   const addAppointmentSeries = useCallback(async (
@@ -1061,7 +1072,7 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { ok: false, error: result.error };
     }
     return { ok: true, data: created };
-  }, [isLiveProduction, currentPsychologist, pushErrorNotification]);
+  }, [isLiveProduction, buildAppointment, pushErrorNotification]);
 
   /** Edição e remarcação. Se o banco recusar, a tela volta ao valor anterior. */
   const updateAppointment = useCallback(async (id: string, updates: Partial<Appointment>): Promise<WriteResult> => {

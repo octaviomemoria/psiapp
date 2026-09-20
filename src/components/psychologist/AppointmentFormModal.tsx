@@ -80,7 +80,8 @@ export const AppointmentFormModal: React.FC<AppointmentFormModalProps> = ({ isOp
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, appointment, initialStart, initialPatientId]);
 
-  const startDate = startsAt ? new Date(startsAt) : null;
+  // memoizado: um `new Date()` a cada render invalidava o useMemo de conflitos abaixo em todo render
+  const startDate = useMemo(() => (startsAt ? new Date(startsAt) : null), [startsAt]);
   const validStart = startDate !== null && !isNaN(startDate.getTime());
   const endIso = validStart ? new Date(startDate!.getTime() + durationMinutes * 60000).toISOString() : '';
 
@@ -101,7 +102,7 @@ export const AppointmentFormModal: React.FC<AppointmentFormModalProps> = ({ isOp
         }),
       }))
       .filter(o => o.list.length > 0);
-  }, [validStart, startsAt, durationMinutes, patientId, roomId, recurrence, occurrences, appointment, appointments, currentPsychologist.id, endIso, startDate]);
+  }, [validStart, durationMinutes, patientId, roomId, recurrence, occurrences, appointment, appointments, currentPsychologist.id, endIso, startDate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
