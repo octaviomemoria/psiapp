@@ -13,6 +13,7 @@ import { PatientDetailView } from '@/components/psychologist/PatientDetailView';
 import { AgendaView } from '@/components/psychologist/AgendaView';
 import { LibraryView } from '@/components/psychologist/LibraryView';
 import { FinancialView } from '@/components/psychologist/FinancialView';
+import { ReportsView } from '@/components/psychologist/reports/ReportsView';
 import { AIAssistantWidget } from '@/components/common/AIAssistantWidget';
 
 // Patient Views
@@ -162,6 +163,14 @@ export default function Home() {
 
             {psychologistTab === 'financeiro' && (
               <FinancialView onNavigateTab={setPsychologistTab} />
+            )}
+
+            {psychologistTab === 'relatorios' && (
+              <ReportsView
+                onSelectPatient={id => {
+                  handleSelectPatientForDetail(id);
+                }}
+              />
             )}
           </div>
         )}

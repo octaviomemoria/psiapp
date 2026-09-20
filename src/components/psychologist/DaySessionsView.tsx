@@ -7,7 +7,7 @@ import { ptBR } from 'date-fns/locale';
 import { Appointment } from '@/types/database';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { dayKey } from '@/lib/calendar/schedule-utils';
+import { capitalizeFirst, dayKey } from '@/lib/calendar/schedule-utils';
 import { AppointmentCard, STATUS_LABEL } from './AppointmentCard';
 
 interface DaySessionsViewProps {
@@ -56,7 +56,7 @@ export const DaySessionsView: React.FC<DaySessionsViewProps> = ({ date, onDateCh
           />
         </div>
         <div className="text-right">
-          <p className="text-sm font-bold text-slate-800 capitalize">{format(date, "EEEE, d 'de' MMMM 'de' yyyy", { locale: ptBR })}</p>
+          <p className="text-sm font-bold text-slate-800">{capitalizeFirst(format(date, "EEEE, d 'de' MMMM 'de' yyyy", { locale: ptBR }))}</p>
           <p className="text-xs text-slate-500">
             {dayAppointments.length === 0
               ? 'Nenhuma sessão'

@@ -21,6 +21,7 @@ export default function PsychologistLayout({
     if (pathname.includes('/pacientes')) return 'pacientes';
     if (pathname.includes('/biblioteca')) return 'biblioteca';
     if (pathname.includes('/financeiro')) return 'financeiro';
+    if (pathname.includes('/relatorios')) return 'relatorios';
     return 'dashboard';
   };
 
@@ -40,6 +41,9 @@ export default function PsychologistLayout({
         break;
       case 'financeiro':
         router.push('/psicologo/financeiro');
+        break;
+      case 'relatorios':
+        router.push('/psicologo/relatorios');
         break;
       default:
         router.push('/psicologo/dashboard');

@@ -5,6 +5,9 @@ import type { Appointment, AppointmentStatus, RecurrenceRule, WeeklyHours } from
 // Calendário (datas locais do navegador; semana começa no domingo)
 // ---------------------------------------------------------------------------
 
+/** Só a primeira letra maiúscula (o CSS capitalize também capitalizaria "de"). */
+export const capitalizeFirst = (text: string): string => text.charAt(0).toUpperCase() + text.slice(1);
+
 /** Chave de dia local "yyyy-MM-dd". */
 export function dayKey(value: Date | string): string {
   return format(typeof value === 'string' ? new Date(value) : value, 'yyyy-MM-dd');

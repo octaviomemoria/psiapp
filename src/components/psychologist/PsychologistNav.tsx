@@ -8,6 +8,7 @@ import {
   ClipboardList,
   BookOpen,
   DollarSign,
+  BarChart3,
   Settings,
   Sparkles
 } from 'lucide-react';
@@ -24,6 +25,7 @@ export const PsychologistNav: React.FC<PsychologistNavProps> = ({ activeTab, onS
     { id: 'pacientes', label: 'Pacientes', icon: Users },
     { id: 'biblioteca', label: 'Biblioteca & Exercícios', icon: BookOpen },
     { id: 'financeiro', label: 'Financeiro & Recibos', icon: DollarSign },
+    { id: 'relatorios', label: 'Relatórios', icon: BarChart3 },
   ];
 
   return (

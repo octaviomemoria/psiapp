@@ -35,7 +35,8 @@ import {
   MessageSquare,
   Sparkles,
   Send,
-  Printer
+  Printer,
+  DollarSign
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -46,6 +47,7 @@ import { EmptyState } from '@/components/common/EmptyState';
 import { formatDate, formatDateTime, formatRelativeDate } from '@/lib/utils';
 import { SessionFormModal } from './SessionFormModal';
 import { PatientFormModal } from './PatientFormModal';
+import { PatientFinancialTab } from './reports/PatientFinancialTab';
 import { calculateAge, formatCPF, formatCEP } from '@/lib/utils/masks';
 import { ExerciseBuilderModal } from './ExerciseBuilderModal';
 import { ExerciseReviewModal } from './ExerciseReviewModal';
@@ -72,7 +74,7 @@ interface PatientDetailViewProps {
   onBack: () => void;
 }
 
-type TabType = 'overview' | 'timeline' | 'sessions' | 'goals' | 'exercises' | 'scales' | 'diary' | 'mood' | 'contents';
+type TabType = 'overview' | 'timeline' | 'sessions' | 'goals' | 'exercises' | 'scales' | 'diary' | 'mood' | 'contents' | 'financial';
 
 export const PatientDetailView: React.FC<PatientDetailViewProps> = ({ patientId, onBack }) => {
   const {
@@ -215,6 +217,7 @@ export const PatientDetailView: React.FC<PatientDetailViewProps> = ({ patientId,
     { id: 'diary', label: 'Diário Compartilhado', icon: BookOpen, count: sharedDiaryEntries.length },
     { id: 'mood', label: 'Humor & Evolução', icon: Heart, count: patientMoods.length },
     { id: 'contents', label: 'Conteúdos', icon: FileText, count: patientAssignedContents.length },
+    { id: 'financial', label: 'Financeiro', icon: DollarSign },
   ];
 
   return (
@@ -1167,6 +1170,8 @@ export const PatientDetailView: React.FC<PatientDetailViewProps> = ({ patientId,
       )}
 
       {/* 7. ABA: CONTEÚDOS E MATERIAIS */}
+      {activeTab === 'financial' && <PatientFinancialTab patient={patient} />}
+
       {activeTab === 'contents' && (
         <div className="space-y-6">
           <div className="flex items-center justify-between">

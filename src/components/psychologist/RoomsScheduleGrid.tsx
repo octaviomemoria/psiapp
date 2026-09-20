@@ -5,7 +5,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { addDays, format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { usePsi } from '@/lib/store/psi-context';
-import { dayKey, occupiesSlot } from '@/lib/calendar/schedule-utils';
+import { capitalizeFirst, dayKey, occupiesSlot } from '@/lib/calendar/schedule-utils';
 import { Button } from '@/components/ui/Button';
 import { cn } from '@/lib/utils';
 import { shortTime, STATUS_LABEL } from './AppointmentCard';
@@ -37,7 +37,7 @@ export const RoomsScheduleGrid: React.FC = () => {
         <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">Agenda das Salas</h3>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => setDate(addDays(date, -1))} aria-label="Dia anterior"><ChevronLeft className="w-4 h-4" /></Button>
-          <span className="text-xs font-semibold text-slate-700 capitalize min-w-[150px] text-center">{format(date, "EEE, d 'de' MMM", { locale: ptBR })}</span>
+          <span className="text-xs font-semibold text-slate-700 min-w-[150px] text-center">{capitalizeFirst(format(date, "EEE, d 'de' MMM", { locale: ptBR }))}</span>
           <Button variant="outline" size="sm" onClick={() => setDate(addDays(date, 1))} aria-label="Próximo dia"><ChevronRight className="w-4 h-4" /></Button>
           <Button variant="outline" size="sm" onClick={() => setDate(new Date())} className="text-xs">Hoje</Button>
         </div>

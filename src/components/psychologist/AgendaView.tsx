@@ -25,7 +25,7 @@ import { DaySessionsView } from './DaySessionsView';
 import { BookingRequestsPanel } from './BookingRequestsPanel';
 import { BookingSettingsModal } from './BookingSettingsModal';
 import { RoomsAgendaView } from './RoomsAgendaView';
-import { getWeekDays } from '@/lib/calendar/schedule-utils';
+import { capitalizeFirst, getWeekDays } from '@/lib/calendar/schedule-utils';
 import { cn, toLocalDateTimeInput } from '@/lib/utils';
 
 interface AgendaViewProps {
@@ -167,7 +167,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ onSelectPatient }) => {
         {(mode === 'month' || mode === 'week') && (
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => step(-1)} aria-label="Anterior"><ChevronLeft className="w-4 h-4" /></Button>
-            <span className="text-sm font-bold text-slate-800 capitalize min-w-[190px] text-center">{rangeLabel}</span>
+            <span className="text-sm font-bold text-slate-800 min-w-[190px] text-center">{capitalizeFirst(rangeLabel)}</span>
             <Button variant="outline" size="sm" onClick={() => step(1)} aria-label="Próximo"><ChevronRight className="w-4 h-4" /></Button>
             <Button variant="outline" size="sm" onClick={() => setDate(new Date())} className="text-xs">Hoje</Button>
           </div>

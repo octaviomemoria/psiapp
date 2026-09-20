@@ -2,17 +2,17 @@
 
 import React from 'react';
 import { useRouter } from 'next/navigation';
-import { FinancialModal } from '@/components/psychologist/FinancialModal';
+import { FinancialView } from '@/components/psychologist/FinancialView';
 
 export default function PsychologistFinancialPage() {
   const router = useRouter();
 
+  // Mesma tela completa da navegação por abas (antes esta rota abria um modal simplificado).
+  const handleNavigateTab = (tab: string) => router.push(`/psicologo/${tab}`);
+
   return (
     <div>
-      <FinancialModal
-        isOpen={true}
-        onClose={() => router.push('/psicologo/dashboard')}
-      />
+      <FinancialView onNavigateTab={handleNavigateTab} />
     </div>
   );
 }
