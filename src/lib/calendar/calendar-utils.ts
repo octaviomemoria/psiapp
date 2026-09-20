@@ -11,6 +11,18 @@ export function formatCalendarDateUtc(isoDate: string): string {
 }
 
 /**
+ * Escapa um valor TEXT do iCalendar (RFC 5545 §3.3.11). Sem isso, um nome ou observação com
+ * quebra de linha, vírgula ou ponto e vírgula corrompe o evento ou injeta propriedades novas.
+ */
+export function escapeIcsText(value: string): string {
+  return String(value ?? '')
+    .replace(/\\/g, '\\\\')
+    .replace(/\r\n|\r|\n/g, '\\n')
+    .replace(/;/g, '\\;')
+    .replace(/,/g, '\\,');
+}
+
+/**
  * Gera URL direta para adicionar consulta no Google Agenda em 1 clique
  */
 export function generateGoogleCalendarUrl(appointment: Appointment, psychologistName?: string): string {
@@ -39,9 +51,9 @@ export function generateSingleIcsContent(appointment: Appointment, psychologistN
   const dtStamp = formatCalendarDateUtc(new Date().toISOString());
   const dtStart = formatCalendarDateUtc(appointment.starts_at);
   const dtEnd = formatCalendarDateUtc(appointment.ends_at);
-  const summary = `Sessão de Psicoterapia — ${appointment.patient_name || 'Paciente'}`;
-  const location = appointment.location_or_link || (appointment.modality === 'online' ? 'Teleatendimento Online' : 'Consultório');
-  const description = `Atendimento clínico com ${psychologistName || 'Psicólogo(a)'}. ${appointment.notes ? 'Obs: ' + appointment.notes : ''} [PsiApp]`;
+  const summary = escapeIcsText(`Sessão de Psicoterapia — ${appointment.patient_name || 'Paciente'}`);
+  const location = escapeIcsText(appointment.location_or_link || (appointment.modality === 'online' ? 'Teleatendimento Online' : 'Consultório'));
+  const description = escapeIcsText(`Atendimento clínico com ${psychologistName || 'Psicólogo(a)'}. ${appointment.notes ? 'Obs: ' + appointment.notes : ''} [PsiApp]`);
 
   return [
     'BEGIN:VCALENDAR',
@@ -94,9 +106,9 @@ export function generateFullIcalFeed(appointments: Appointment[], psychologistNa
     const uid = `appointment-${a.id}@psiappgestao.vercel.app`;
     const dtStart = formatCalendarDateUtc(a.starts_at);
     const dtEnd = formatCalendarDateUtc(a.ends_at);
-    const summary = `Sessão: ${a.patient_name || 'Paciente'}`;
-    const location = a.location_or_link || (a.modality === 'online' ? 'Online' : 'Consultório');
-    const description = `Paciente: ${a.patient_name || 'Não informado'} | Modalidade: ${a.modality === 'online' ? 'Online' : 'Presencial'} | PsiApp`;
+    const summary = escapeIcsText(`Sessão: ${a.patient_name || 'Paciente'}`);
+    const location = escapeIcsText(a.location_or_link || (a.modality === 'online' ? 'Online' : 'Consultório'));
+    const description = escapeIcsText(`Paciente: ${a.patient_name || 'Não informado'} | Modalidade: ${a.modality === 'online' ? 'Online' : 'Presencial'} | PsiApp`);
 
     return [
       'BEGIN:VEVENT',
@@ -123,7 +135,7 @@ export function generateFullIcalFeed(appointments: Appointment[], psychologistNa
     'PRODID:-//PsiApp//Agenda Clinica Profissional//PT-BR',
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
-    `X-WR-CALNAME:PsiApp - Agenda ${psychologistName || 'Clínica'}`,
+    `X-WR-CALNAME:${escapeIcsText(`PsiApp - Agenda ${psychologistName || 'Clínica'}`)}`,
     'X-WR-TIMEZONE:America/Sao_Paulo',
     events,
     'END:VCALENDAR'

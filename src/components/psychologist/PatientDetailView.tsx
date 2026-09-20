@@ -45,6 +45,8 @@ import { PrivacyBadge } from '@/components/common/PrivacyBadge';
 import { EmptyState } from '@/components/common/EmptyState';
 import { formatDate, formatDateTime, formatRelativeDate } from '@/lib/utils';
 import { SessionFormModal } from './SessionFormModal';
+import { PatientFormModal } from './PatientFormModal';
+import { calculateAge, formatCPF, formatCEP } from '@/lib/utils/masks';
 import { ExerciseBuilderModal } from './ExerciseBuilderModal';
 import { ExerciseReviewModal } from './ExerciseReviewModal';
 import { ClinicalReportModal } from './ClinicalReportModal';
@@ -91,8 +93,10 @@ export const PatientDetailView: React.FC<PatientDetailViewProps> = ({ patientId,
     getPatientPsychometricResults,
     moodLogs,
     switchRole,
+    patientGroups,
   } = usePsi();
 
+  const [isEditFormOpen, setIsEditFormOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [isSessionModalOpen, setIsSessionModalOpen] = useState(false);
   const [sessionToEdit, setSessionToEdit] = useState<TherapySession | null>(null);
@@ -246,9 +250,10 @@ export const PatientDetailView: React.FC<PatientDetailViewProps> = ({ patientId,
               </div>
 
               <p className="text-xs sm:text-sm text-slate-500 mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
-                <span>{patient.email}</span>
-                <span>•</span>
-                <span>{patient.phone}</span>
+                {patient.has_social_name && patient.social_name && <><span>Nome social: {patient.social_name}</span><span>•</span></>}
+                {calculateAge(patient.birth_date) !== null && <><span>{calculateAge(patient.birth_date)} anos</span><span>•</span></>}
+                {patient.email && <><span>{patient.email}</span><span>•</span></>}
+                <span>{patient.mobile || patient.phone || 'Sem telefone'}</span>
                 <span>•</span>
                 <span>Início: {formatDate(patient.started_at)}</span>
               </p>
@@ -256,6 +261,17 @@ export const PatientDetailView: React.FC<PatientDetailViewProps> = ({ patientId,
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsEditFormOpen(true)}
+              className="text-xs text-slate-700 border-slate-300 hover:bg-slate-50 flex items-center gap-1"
+              title="Editar dados cadastrais"
+            >
+              <Edit className="w-3.5 h-3.5" />
+              Editar Cadastro
+            </Button>
+
             <Button
               variant="primary"
               size="sm"
@@ -388,6 +404,56 @@ export const PatientDetailView: React.FC<PatientDetailViewProps> = ({ patientId,
                     <strong>Total de Sessões Realizadas:</strong> {patientSessions.length} sessões
                   </div>
                 </div>
+              </CardContent>
+            </Card>
+
+            {/* Dados Cadastrais */}
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <ClipboardList className="w-4 h-4 text-teal-600" />
+                  Dados Cadastrais
+                </CardTitle>
+                <Button variant="ghost" size="sm" onClick={() => setIsEditFormOpen(true)} className="text-xs text-teal-700">
+                  <Edit className="w-3.5 h-3.5 mr-1" /> Editar
+                </Button>
+              </CardHeader>
+              <CardContent>
+                <dl className="grid sm:grid-cols-2 gap-x-6 gap-y-2 text-xs text-slate-600">
+                  {[
+                    ['Grupo', patientGroups.find(g => g.id === patient.group_id)?.name],
+                    ['CPF', patient.cpf ? formatCPF(patient.cpf) : ''],
+                    ['RG', patient.rg],
+                    ['Nascimento', patient.birth_date ? formatDate(patient.birth_date) : ''],
+                    ['Gênero', patient.gender],
+                    ['Celular', patient.mobile || patient.phone],
+                    ['Telefone', patient.landline],
+                    ['Endereço', [
+                      [patient.street, patient.address_number].filter(Boolean).join(', '),
+                      patient.address_complement,
+                      patient.neighborhood,
+                      [patient.city, patient.state].filter(Boolean).join(' - '),
+                      patient.zip_code ? formatCEP(patient.zip_code) : '',
+                    ].filter(Boolean).join(' • ')],
+                    ['Naturalidade', patient.birthplace],
+                    ['Escolaridade', patient.education_level],
+                    ['Raça', patient.race],
+                    ['Profissão', patient.occupation],
+                    ['Parente', [patient.relative_name, patient.relative_relationship && `(${patient.relative_relationship})`, patient.relative_phone].filter(Boolean).join(' ')],
+                    ['Onde nos conheceu', patient.how_found_us],
+                    ['Encaminhado por', patient.referred_by],
+                    ['Tags', (patient.tags || []).join(', ')],
+                    ['Responsável', [patient.guardian_name, patient.guardian_mobile, patient.guardian_email].filter(Boolean).join(' • ')],
+                  ].filter(([, value]) => Boolean(value)).map(([label, value]) => (
+                    <div key={label as string}>
+                      <dt className="font-semibold text-slate-500">{label}</dt>
+                      <dd className="text-slate-800">{value}</dd>
+                    </div>
+                  ))}
+                </dl>
+                {!patient.cpf && !patient.rg && !patient.street && !patient.mobile && (
+                  <p className="text-xs text-slate-400">Cadastro básico. Use "Editar" para completar endereço, documentos e responsável.</p>
+                )}
               </CardContent>
             </Card>
 
@@ -1340,6 +1406,12 @@ export const PatientDetailView: React.FC<PatientDetailViewProps> = ({ patientId,
           </div>
         </form>
       </Modal>
+
+      <PatientFormModal
+        isOpen={isEditFormOpen}
+        onClose={() => setIsEditFormOpen(false)}
+        patient={patient}
+      />
 
       {/* Modal de Relatório Clínico & Declaração */}
       <ClinicalReportModal

@@ -17,14 +17,16 @@ import {
   Activity,
   CheckCircle2,
   AlertCircle,
-  Trash2
+  Trash2,
+  Pencil
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
-import { Modal } from '@/components/ui/Modal';
 import { PatientInviteModal } from './PatientInviteModal';
+import { PatientFormModal } from './PatientFormModal';
 import { formatDate, formatRelativeDate } from '@/lib/utils';
+import { calculateAge } from '@/lib/utils/masks';
 import { Share2, Link } from 'lucide-react';
 
 interface PatientListViewProps {
@@ -32,73 +34,41 @@ interface PatientListViewProps {
 }
 
 export const PatientListView: React.FC<PatientListViewProps> = ({ onSelectPatient }) => {
-  const { patients, addPatient, deletePatient, sessions, assignedExercises, appointments } = usePsi();
+  const { patients, patientGroups, deletePatient, sessions, assignedExercises, appointments } = usePsi();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'pending_exercises'>('all');
-  const [isNewPatientModalOpen, setIsNewPatientModalOpen] = useState(false);
+  const [filterGroup, setFilterGroup] = useState('');
+  const [filterTag, setFilterTag] = useState('');
+  const [isPatientFormOpen, setIsPatientFormOpen] = useState(false);
+  const [editingPatient, setEditingPatient] = useState<Patient | undefined>(undefined);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
 
-  // Form State Novo Paciente
-  const [fullName, setFullName] = useState('');
-  const [socialName, setSocialName] = useState('');
-  const [birthDate, setBirthDate] = useState('1995-01-01');
-  const [gender, setGender] = useState('Feminino');
-  const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
-  const [emergencyContactName, setEmergencyContactName] = useState('');
-  const [emergencyContactPhone, setEmergencyContactPhone] = useState('');
-  const [clinicalNotesOverview, setClinicalNotesOverview] = useState('');
-
-  const handleCreatePatient = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!fullName || !email) return;
-
-    const created = addPatient({
-      full_name: fullName,
-      social_name: socialName || undefined,
-      birth_date: birthDate,
-      gender,
-      email,
-      phone,
-      emergency_contact_name: emergencyContactName || undefined,
-      emergency_contact_phone: emergencyContactPhone || undefined,
-      status: 'active',
-      clinical_notes_overview: clinicalNotesOverview,
-    });
-
-    setIsNewPatientModalOpen(false);
-    // Limpar form
-    setFullName('');
-    setSocialName('');
-    setEmail('');
-    setPhone('');
-    setClinicalNotesOverview('');
-    onSelectPatient(created.id);
+  const openNewPatientForm = () => {
+    setEditingPatient(undefined);
+    setIsPatientFormOpen(true);
   };
 
-  const calculateAge = (birthDateString: string): number => {
-    try {
-      const birth = new Date(birthDateString);
-      const now = new Date();
-      let age = now.getFullYear() - birth.getFullYear();
-      const m = now.getMonth() - birth.getMonth();
-      if (m < 0 || (m === 0 && now.getDate() < birth.getDate())) {
-        age--;
-      }
-      return age || 28;
-    } catch {
-      return 28;
-    }
+  const openEditPatientForm = (patient: Patient) => {
+    setEditingPatient(patient);
+    setIsPatientFormOpen(true);
   };
+
+  const allTags = [...new Set(patients.flatMap(p => p.tags || []))].sort((a, b) => a.localeCompare(b));
 
   const filteredPatients = patients.filter(patient => {
+    const term = searchTerm.toLowerCase();
+    const searchDigits = searchTerm.replace(/\D/g, '');
     const matchesSearch =
-      patient.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      patient.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (patient.clinical_notes_overview && patient.clinical_notes_overview.toLowerCase().includes(searchTerm.toLowerCase()));
+      patient.full_name.toLowerCase().includes(term) ||
+      (patient.social_name || '').toLowerCase().includes(term) ||
+      (patient.email || '').toLowerCase().includes(term) ||
+      (searchDigits.length >= 3 && (patient.cpf || '').includes(searchDigits)) ||
+      (patient.clinical_notes_overview && patient.clinical_notes_overview.toLowerCase().includes(term));
 
     if (!matchesSearch) return false;
+    if (filterGroup && patient.group_id !== filterGroup) return false;
+    if (filterTag && !(patient.tags || []).includes(filterTag)) return false;
 
     if (filterStatus === 'active') return patient.status === 'active';
     if (filterStatus === 'pending_exercises') {
@@ -134,7 +104,7 @@ export const PatientListView: React.FC<PatientListViewProps> = ({ onSelectPatien
           <Button
             variant="primary"
             size="md"
-            onClick={() => setIsNewPatientModalOpen(true)}
+            onClick={openNewPatientForm}
             className="shadow-sm font-semibold"
           >
             <UserPlus className="w-4 h-4 mr-2" />
@@ -151,12 +121,34 @@ export const PatientListView: React.FC<PatientListViewProps> = ({ onSelectPatien
             type="text"
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
-            placeholder="Buscar por nome, e-mail ou demanda..."
+            placeholder="Buscar por nome, CPF, e-mail ou demanda..."
             className="w-full pl-9 pr-4 py-2 text-sm rounded-xl border border-slate-200 focus:ring-2 focus:ring-teal-500 focus:outline-none"
           />
         </div>
 
         <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
+          {patientGroups.length > 0 && (
+            <select
+              value={filterGroup}
+              onChange={e => setFilterGroup(e.target.value)}
+              aria-label="Filtrar por grupo"
+              className="px-2 py-1.5 text-xs rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-teal-500 focus:outline-none"
+            >
+              <option value="">Todos os grupos</option>
+              {patientGroups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+            </select>
+          )}
+          {allTags.length > 0 && (
+            <select
+              value={filterTag}
+              onChange={e => setFilterTag(e.target.value)}
+              aria-label="Filtrar por tag"
+              className="px-2 py-1.5 text-xs rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-teal-500 focus:outline-none"
+            >
+              <option value="">Todas as tags</option>
+              {allTags.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+          )}
           <Button
             variant={filterStatus === 'all' ? 'primary' : 'outline'}
             size="sm"
@@ -225,8 +217,21 @@ export const PatientListView: React.FC<PatientListViewProps> = ({ onSelectPatien
                         {patient.full_name}
                       </h3>
                       <p className="text-xs text-slate-500 mt-0.5">
-                        {calculateAge(patient.birth_date)} anos • {patient.gender || 'Gênero não inf.'}
+                        {(() => {
+                          const age = calculateAge(patient.birth_date);
+                          return age === null ? 'Idade não inf.' : `${age} anos`;
+                        })()} • {patient.gender || 'Gênero não inf.'}
                       </p>
+                      {(patient.group_id || (patient.tags && patient.tags.length > 0)) && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {patient.group_id && patientGroups.find(g => g.id === patient.group_id) && (
+                            <Badge variant="info" size="sm">{patientGroups.find(g => g.id === patient.group_id)!.name}</Badge>
+                          )}
+                          {(patient.tags || []).slice(0, 3).map(tag => (
+                            <Badge key={tag} variant="neutral" size="sm">{tag}</Badge>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -296,6 +301,17 @@ export const PatientListView: React.FC<PatientListViewProps> = ({ onSelectPatien
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
+                    openEditPatientForm(patient);
+                  }}
+                  title="Editar cadastro"
+                  className="p-2 text-slate-400 hover:text-teal-700 rounded-lg hover:bg-teal-50 transition-colors"
+                >
+                  <Pencil className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
                     if (window.confirm(`Tem certeza que deseja remover o paciente "${patient.full_name}"?`)) {
                       deletePatient(patient.id);
                     }
@@ -333,7 +349,7 @@ export const PatientListView: React.FC<PatientListViewProps> = ({ onSelectPatien
             <Button
               variant="primary"
               size="md"
-              onClick={() => setIsNewPatientModalOpen(true)}
+              onClick={openNewPatientForm}
               className="font-semibold shadow-sm"
             >
               <UserPlus className="w-4 h-4 mr-2" />
@@ -343,133 +359,14 @@ export const PatientListView: React.FC<PatientListViewProps> = ({ onSelectPatien
         </Card>
       )}
 
-      {/* Modal Cadastro de Novo Paciente */}
-      <Modal
-        isOpen={isNewPatientModalOpen}
-        onClose={() => setIsNewPatientModalOpen(false)}
-        title="Cadastrar Novo Paciente"
-        description="Adicione um novo paciente à sua carteira de acompanhamento clínico."
-        maxWidth="2xl"
-      >
-        <form onSubmit={handleCreatePatient} className="space-y-4">
-          <div className="grid sm:grid-cols-2 gap-3">
-            <div className="sm:col-span-2">
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Nome Completo *
-              </label>
-              <input
-                type="text"
-                value={fullName}
-                onChange={e => setFullName(e.target.value)}
-                placeholder="Ex: Nome do Paciente"
-                className="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 focus:ring-2 focus:ring-teal-500 focus:outline-none"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Nome Social / Como prefere ser chamado(a)
-              </label>
-              <input
-                type="text"
-                value={socialName}
-                onChange={e => setSocialName(e.target.value)}
-                placeholder="Ex: Mari"
-                className="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 focus:ring-2 focus:ring-teal-500 focus:outline-none"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Data de Nascimento *
-              </label>
-              <input
-                type="date"
-                value={birthDate}
-                onChange={e => setBirthDate(e.target.value)}
-                className="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 focus:ring-2 focus:ring-teal-500 focus:outline-none"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                E-mail de Contato *
-              </label>
-              <input
-                type="email"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                placeholder="paciente@email.com"
-                className="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 focus:ring-2 focus:ring-teal-500 focus:outline-none"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Telefone / WhatsApp
-              </label>
-              <input
-                type="tel"
-                value={phone}
-                onChange={e => setPhone(e.target.value)}
-                placeholder="(11) 99999-9999"
-                className="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 focus:ring-2 focus:ring-teal-500 focus:outline-none"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Contato de Emergência (Nome e Vínculo)
-              </label>
-              <input
-                type="text"
-                value={emergencyContactName}
-                onChange={e => setEmergencyContactName(e.target.value)}
-                placeholder="Ex: Lucas Costa (Irmão)"
-                className="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 focus:ring-2 focus:ring-teal-500 focus:outline-none"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Telefone de Emergência
-              </label>
-              <input
-                type="tel"
-                value={emergencyContactPhone}
-                onChange={e => setEmergencyContactPhone(e.target.value)}
-                placeholder="(11) 98888-8888"
-                className="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 focus:ring-2 focus:ring-teal-500 focus:outline-none"
-              />
-            </div>
-
-            <div className="sm:col-span-2">
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Demanda Inicial / Observações Clínicas
-              </label>
-              <textarea
-                value={clinicalNotesOverview}
-                onChange={e => setClinicalNotesOverview(e.target.value)}
-                rows={3}
-                placeholder="Queixa principal, objetivos preliminares e histórico relevante..."
-                className="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 focus:ring-2 focus:ring-teal-500 focus:outline-none"
-              />
-            </div>
-          </div>
-
-          <div className="flex items-center justify-end gap-2 pt-4 border-t border-slate-100">
-            <Button type="button" variant="outline" size="sm" onClick={() => setIsNewPatientModalOpen(false)}>
-              Cancelar
-            </Button>
-            <Button type="submit" variant="primary" size="sm" className="font-semibold">
-              Salvar Paciente
-            </Button>
-          </div>
-        </form>
-      </Modal>
+      <PatientFormModal
+        isOpen={isPatientFormOpen}
+        onClose={() => setIsPatientFormOpen(false)}
+        patient={editingPatient}
+        onSaved={saved => {
+          if (!editingPatient) onSelectPatient(saved.id);
+        }}
+      />
 
       <PatientInviteModal
         isOpen={isInviteModalOpen}

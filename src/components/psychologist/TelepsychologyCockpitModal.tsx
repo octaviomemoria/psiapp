@@ -130,10 +130,10 @@ export const TelepsychologyCockpitModal: React.FC<TelepsychologyCockpitModalProp
       }
 
       // Adiciona a sessão ao histórico clínico
-      addSession(
+      const saveResult = await addSession(
         {
           patient_id: patientId,
-          psychologist_id: currentPsychologist?.id || 'psico-1',
+          psychologist_id: currentPsychologist.id,
           session_date: new Date().toISOString(),
           duration_minutes: Math.ceil(elapsedSeconds / 60) || 50,
           session_number: sessionNumber,
@@ -156,7 +156,13 @@ export const TelepsychologyCockpitModal: React.FC<TelepsychologyCockpitModalProp
           : undefined
       );
 
-      // Limpar rascunho
+      // Só descarta o rascunho e fecha depois que o banco confirmar a gravação
+      if (!saveResult.ok) {
+        setIsEncrypting(false);
+        alert(`A sessão NÃO foi gravada. ${saveResult.error || ''}\n\nSuas anotações continuam preservadas no rascunho; tente finalizar novamente.`);
+        return;
+      }
+
       localStorage.removeItem(`psi_draft_${patientId}`);
 
       addNotification({

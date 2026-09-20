@@ -49,7 +49,7 @@ export const PublicBookingPage: React.FC<PublicBookingPageProps> = ({ isOpen, on
       full_name: patientName,
       email: patientEmail,
       phone: patientPhone || '(11) 99999-0000',
-      birth_date: '1995-01-01',
+      birth_date: '',
       status: 'active',
       clinical_notes_overview: 'Agendamento online realizado via Bio Link público.'
     });

@@ -41,7 +41,7 @@ export const ManagerPatientsView: React.FC = () => {
   const [socialName, setSocialName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
-  const [birthDate, setBirthDate] = useState('1996-04-15');
+  const [birthDate, setBirthDate] = useState('');
   const [gender, setGender] = useState('Feminino');
   const [assignedPsicoId, setAssignedPsicoId] = useState(clinicPsychologists[0]?.id || '');
 

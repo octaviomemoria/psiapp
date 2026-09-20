@@ -1,146 +1,89 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase/client';
+import { createHash, timingSafeEqual } from 'node:crypto';
+import { createClient } from '@supabase/supabase-js';
+import { supabaseUrl } from '@/lib/supabase/client';
+import { processPaymentWebhook, WebhookDb } from '@/lib/billing/webhook-handler';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-interface AsaasWebhookPayload {
-  event: string;
-  payment?: {
-    id: string;
-    customer?: string;
-    value?: number;
-    netValue?: number;
-    billingType?: string;
-    status?: string;
-    externalReference?: string;
-    paymentDate?: string;
-    clientPaymentDate?: string;
-  };
-  subscription?: {
-    id: string;
-    status?: string;
-    value?: number;
-    externalReference?: string;
+/** Comparação em tempo constante (o hash iguala o tamanho e evita vazar o segredo por timing). */
+function secretsMatch(expected: string, received: string | null): boolean {
+  if (!received) return false;
+  const a = createHash('sha256').update(expected).digest();
+  const b = createHash('sha256').update(received).digest();
+  return timingSafeEqual(a, b);
+}
+
+function buildDb(): WebhookDb | null {
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!serviceKey) return null;
+  // service_role: usada apenas aqui, no servidor, porque o webhook não tem sessão de usuário.
+  const admin = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
+
+  return {
+    async getAppointment(id) {
+      const { data, error } = await admin.from('appointments').select('id, price, payment_status').eq('id', id).maybeSingle();
+      if (error) throw new Error(error.message);
+      return data ? { id: data.id, price: data.price, payment_status: data.payment_status } : null;
+    },
+    async markPaid(id, status, paidAt) {
+      const { data, error } = await admin
+        .from('appointments')
+        .update({ payment_status: status, paid_at: paidAt })
+        .eq('id', id)
+        .eq('payment_status', 'pending')
+        .select('id');
+      if (error) throw new Error(error.message);
+      return (data?.length ?? 0) > 0;
+    },
+    async markRefunded(id) {
+      const { data, error } = await admin
+        .from('appointments')
+        .update({ payment_status: 'pending', paid_at: null })
+        .eq('id', id)
+        .in('payment_status', ['paid_pix', 'paid_card'])
+        .select('id');
+      if (error) throw new Error(error.message);
+      return (data?.length ?? 0) > 0;
+    },
   };
 }
 
 /**
- * Webhook de Pagamentos (Asaas / Stripe / Pix Dinâmico)
- * Rota: POST /api/billing/webhook
+ * Webhook de pagamentos (Asaas). POST /api/billing/webhook
+ * Falha fechada: sem segredo configurado no servidor, ou com segredo errado, nada é processado.
+ * (Antes, se a variável de ambiente não existisse, qualquer pessoa podia marcar sessões como pagas.)
  */
 export async function POST(req: NextRequest) {
-  try {
-    // 1. Verificação de Token Secreto do Webhook
-    const expectedToken = process.env.ASAAS_WEBHOOK_TOKEN || process.env.PAYMENT_WEBHOOK_SECRET;
-    const receivedToken = req.headers.get('asaas-access-token') || req.headers.get('x-webhook-secret');
-
-    if (expectedToken && receivedToken !== expectedToken) {
-      return NextResponse.json(
-        { error: 'Não autorizado. Token de webhook inválido.' },
-        { status: 401 }
-      );
-    }
-
-    const payload = (await req.json()) as AsaasWebhookPayload;
-    const event = payload.event;
-    const payment = payload.payment;
-    const subscription = payload.subscription;
-
-    if (!event) {
-      return NextResponse.json(
-        { error: 'Payload inválido: evento ausente.' },
-        { status: 400 }
-      );
-    }
-
-    // 2. Processamento de Pagamento de Sessão de Psicoterapia
-    if (
-      event === 'PAYMENT_RECEIVED' ||
-      event === 'PAYMENT_CONFIRMED' ||
-      event === 'payment_intent.succeeded'
-    ) {
-      const sessionId = payment?.externalReference;
-
-      if (sessionId && supabase) {
-        // Atualiza a sessão clínica para paga via Pix
-        await supabase
-          .from('therapy_sessions')
-          .update({
-            payment_status: 'paid_pix',
-          })
-          .eq('id', sessionId);
-
-        // Registra na trilha de auditoria clínica
-        await supabase.from('clinical_audit_log').insert({
-          action: 'PAYMENT_CONFIRMED_WEBHOOK',
-          resource_type: 'therapy_sessions',
-          resource_id: sessionId,
-          user_role: 'system',
-          changes_summary: `Pagamento de R$ ${payment?.value?.toFixed(2) || '0.00'} confirmado via Pix Gateway.`,
-        });
-      }
-
-      return NextResponse.json({
-        received: true,
-        status: 'processed',
-        event,
-        reference: sessionId,
-      });
-    }
-
-    // 3. Processamento de Estorno / Reembolso
-    if (event === 'PAYMENT_REFUNDED') {
-      const sessionId = payment?.externalReference;
-      if (sessionId && supabase) {
-        await supabase
-          .from('therapy_sessions')
-          .update({ payment_status: 'pending' })
-          .eq('id', sessionId);
-      }
-
-      return NextResponse.json({
-        received: true,
-        status: 'refund_recorded',
-        event,
-      });
-    }
-
-    // 4. Processamento de Assinatura SaaS da Clínica / Terapeuta
-    if (
-      event === 'SUBSCRIPTION_CREATED' ||
-      event === 'SUBSCRIPTION_RENEWED' ||
-      event === 'customer.subscription.updated'
-    ) {
-      const orgId = subscription?.externalReference;
-
-      return NextResponse.json({
-        received: true,
-        status: 'subscription_active',
-        event,
-        organizationId: orgId,
-      });
-    }
-
-    return NextResponse.json({
-      received: true,
-      status: 'ignored_unhandled_event',
-      event,
-    });
-  } catch (error: any) {
-    console.error('Erro no processamento do webhook de billing:', error);
-    return NextResponse.json(
-      { error: 'Erro interno no processamento do webhook.', details: error.message },
-      { status: 500 }
-    );
+  const expectedToken = process.env.ASAAS_WEBHOOK_TOKEN || process.env.PAYMENT_WEBHOOK_SECRET;
+  if (!expectedToken) {
+    console.error('[BILLING-WEBHOOK] ASAAS_WEBHOOK_TOKEN não configurado: webhook desativado.');
+    return NextResponse.json({ error: 'Webhook não configurado.' }, { status: 503 });
   }
+
+  const receivedToken = req.headers.get('asaas-access-token') || req.headers.get('x-webhook-secret');
+  if (!secretsMatch(expectedToken, receivedToken)) {
+    return NextResponse.json({ error: 'Não autorizado.' }, { status: 401 });
+  }
+
+  const db = buildDb();
+  if (!db) {
+    console.error('[BILLING-WEBHOOK] SUPABASE_SERVICE_ROLE_KEY não configurada: não é possível gravar pagamentos.');
+    return NextResponse.json({ error: 'Servidor não configurado para gravar pagamentos.' }, { status: 503 });
+  }
+
+  let payload;
+  try {
+    payload = await req.json();
+  } catch {
+    return NextResponse.json({ error: 'Corpo da requisição inválido.' }, { status: 400 });
+  }
+
+  const outcome = await processPaymentWebhook(payload, db);
+  return NextResponse.json(outcome.body, { status: outcome.httpStatus });
 }
 
 export async function GET() {
-  return NextResponse.json({
-    status: 'online',
-    service: 'PsiApp Billing Webhook Service',
-    protocol: 'CFP / BACEN Pix Dynamic',
-    timestamp: new Date().toISOString(),
-  });
+  return NextResponse.json({ status: 'online' });
 }

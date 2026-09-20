@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { usePsi } from '@/lib/store/psi-context';
+import { getBillingResponsible } from '@/lib/utils/patient';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import {
@@ -88,8 +89,9 @@ export const NewTransactionModal: React.FC<NewTransactionModalProps> = ({
     setPatientId(pId);
     const p = patients.find(item => item.id === pId);
     if (p) {
-      setResponsibleName((p as any).financial_responsible_name || p.full_name);
-      setResponsibleCpf((p as any).financial_responsible_cpf || (p as any).cpf || '');
+      const responsible = getBillingResponsible(p);
+      setResponsibleName(responsible.name);
+      setResponsibleCpf(responsible.cpf || '');
       if (!title) {
         setTitle(`Atendimento Clínico - ${p.full_name}`);
       }

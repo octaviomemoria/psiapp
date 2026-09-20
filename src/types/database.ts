@@ -107,6 +107,50 @@ export interface Patient {
   clinical_notes_overview?: string;
   anamnesis_completed?: boolean;
   profile?: UserProfile;
+
+  // Cadastro completo (migração 06). Todos opcionais: pacientes antigos não os têm.
+  group_id?: string | null;
+  mobile?: string;
+  landline?: string;
+  cpf?: string;
+  rg?: string;
+  /** Quando true, `social_name` é o nome usado em cobranças, lembretes e telas. */
+  has_social_name?: boolean;
+  country?: string;
+  zip_code?: string;
+  city?: string;
+  state?: string;
+  street?: string;
+  address_number?: string;
+  neighborhood?: string;
+  address_complement?: string;
+  birthplace?: string;
+  education_level?: string;
+  race?: string;
+  occupation?: string;
+  relative_name?: string;
+  relative_relationship?: string;
+  relative_phone?: string;
+  how_found_us?: string;
+  referred_by?: string;
+  tags?: string[];
+  guardian_name?: string;
+  guardian_email?: string;
+  guardian_mobile?: string;
+  guardian_cpf?: string;
+  guardian_rg?: string;
+  guardian_birth_date?: string;
+  /** Autoriza cobranças, documentos e notas fiscais em nome do responsável (nome e CPF dele). */
+  guardian_allow_billing_contact?: boolean;
+  /** Envia lembretes de sessão para o e-mail/WhatsApp do responsável. */
+  guardian_send_reminders?: boolean;
+}
+
+export interface PatientGroup {
+  id: string;
+  psychologist_id: string;
+  name: string;
+  created_at?: string;
 }
 
 export interface PatientInvite {

@@ -1,69 +1,75 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '@/lib/supabase/client';
 import { generateFullIcalFeed } from '@/lib/calendar/calendar-utils';
 import { Appointment } from '@/types/database';
 
+export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+const TOKEN_RE = /^[0-9a-f]{64}$/i;
+
+// Cabeçalhos comuns: a URL contém um segredo, então nada pode ser cacheado, indexado ou vazar por Referer.
+const PRIVATE_HEADERS = {
+  'Cache-Control': 'no-cache, no-store, max-age=0, must-revalidate',
+  'Referrer-Policy': 'no-referrer',
+  'X-Robots-Tag': 'noindex, nofollow',
+};
+
+function notFound() {
+  // Resposta idêntica para token ausente, malformado ou inexistente: não revela se o token "quase" existe.
+  return new NextResponse('Agenda não encontrada', { status: 404, headers: PRIVATE_HEADERS });
+}
+
+/**
+ * Feed iCal (assinatura de agenda no iPhone/Google).
+ * Exige o token secreto do psicólogo (?token=...). Não existe mais consulta por psychologistId:
+ * antes, sem parâmetro algum, o endpoint devolvia a agenda de todos os psicólogos.
+ * A leitura é feita pela função get_calendar_feed do banco, que só devolve dados do dono do token
+ * e não depende da service_role.
+ */
 export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url);
-  const psychologistId = searchParams.get('psychologistId');
-  const token = searchParams.get('token');
+  const token = new URL(request.url).searchParams.get('token');
+  if (!token || !TOKEN_RE.test(token)) return notFound();
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-  if (!supabaseUrl || !supabaseKey) {
-    return new NextResponse('Configuração de servidor indisponível', { status: 500 });
+  if (!supabase) {
+    return new NextResponse('Configuração de servidor indisponível', { status: 500, headers: PRIVATE_HEADERS });
   }
 
-  const supabase = createClient(supabaseUrl, supabaseKey);
-
   try {
-    let query = supabase
-      .from('appointments')
-      .select('*, patient:patients(full_name)')
-      .in('status', ['scheduled', 'confirmed']);
-
-    if (psychologistId) {
-      query = query.eq('psychologist_id', psychologistId);
-    }
-
-    const { data: appointmentsData, error } = await query;
+    const { data, error } = await supabase.rpc('get_calendar_feed', { p_token: token });
 
     if (error) {
-      console.error('Erro ao buscar agendamentos para o feed iCal:', error);
-      return new NextResponse('Erro ao gerar calendário', { status: 500 });
+      console.error('Erro ao gerar o feed iCal:', error.message);
+      return new NextResponse('Erro ao gerar calendário', { status: 500, headers: PRIVATE_HEADERS });
     }
 
-    // Mapear dados para o formato de agendamento
-    const appointments: Appointment[] = (appointmentsData || []).map((a: any) => ({
+    const rows = (data || []) as any[];
+    // Token inexistente e agenda vazia são indistinguíveis aqui; para agenda vazia devolvemos calendário vazio.
+    const appointments: Appointment[] = rows.map(a => ({
       id: a.id,
-      psychologist_id: a.psychologist_id,
-      patient_id: a.patient_id,
-      patient_name: a.patient?.full_name || a.patient_name || 'Paciente',
+      psychologist_id: '',
+      patient_id: '',
+      patient_name: a.patient_name || 'Paciente',
       starts_at: a.starts_at,
       ends_at: a.ends_at,
       modality: a.modality || 'online',
       location_or_link: a.location_or_link || (a.modality === 'online' ? 'Teleatendimento Online' : 'Consultório'),
       status: a.status,
-      notes: a.notes,
-      created_at: a.created_at,
-      updated_at: a.updated_at,
     }));
 
-    const icsContent = generateFullIcalFeed(appointments, 'PsiApp');
+    const psychologistName = rows[0]?.psychologist_name as string | undefined;
+    const icsContent = generateFullIcalFeed(appointments, psychologistName || 'PsiApp');
 
     return new NextResponse(icsContent, {
       status: 200,
       headers: {
+        ...PRIVATE_HEADERS,
         'Content-Type': 'text/calendar; charset=utf-8',
         'Content-Disposition': 'inline; filename="psiapp-agenda.ics"',
-        'Cache-Control': 'no-cache, no-store, max-age=0, must-revalidate',
       },
     });
   } catch (err: any) {
     console.error('Exceção ao gerar feed iCal:', err);
-    return new NextResponse('Erro interno', { status: 500 });
+    return new NextResponse('Erro interno', { status: 500, headers: PRIVATE_HEADERS });
   }
 }

@@ -6,7 +6,26 @@ import { TherapySession, SessionModality } from '@/types/database';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { PrivacyBadge } from '@/components/common/PrivacyBadge';
-import { Lock, FileText, CheckCircle, Sparkles, Calendar, Clock } from 'lucide-react';
+import { Lock, FileText, CheckCircle, Sparkles, Calendar, Clock, AlertTriangle } from 'lucide-react';
+import { toLocalDateTimeInput } from '@/lib/utils';
+import { loadDraft, saveDraft, clearDraft } from '@/lib/utils/draft';
+
+interface SessionFormDraft {
+  selectedPatientId: string;
+  sessionDate: string;
+  durationMinutes: number;
+  modality: SessionModality;
+  mainTopics: string;
+  summary: string;
+  interventionsUsed: string;
+  evolutionObserved: string;
+  homeworkAssigned: string;
+  nextSessionPlan: string;
+  privateClinicalHypothesis: string;
+  supervisionNotes: string;
+  transferenceNotes: string;
+  riskAssessmentNotes: string;
+}
 
 interface SessionFormModalProps {
   isOpen: boolean;
@@ -24,7 +43,7 @@ export const SessionFormModal: React.FC<SessionFormModalProps> = ({
   const { patients, currentPsychologist, addSession, updateSession, sessions, addNotification } = usePsi();
 
   const [selectedPatientId, setSelectedPatientId] = useState<string>(patientId || patients[0]?.id || '');
-  const [sessionDate, setSessionDate] = useState<string>(new Date().toISOString().slice(0, 16));
+  const [sessionDate, setSessionDate] = useState<string>(toLocalDateTimeInput());
   const [durationMinutes, setDurationMinutes] = useState<number>(50);
   const [modality, setModality] = useState<SessionModality>('online');
   const [mainTopics, setMainTopics] = useState<string>('');
@@ -40,10 +59,52 @@ export const SessionFormModal: React.FC<SessionFormModalProps> = ({
   const [transferenceNotes, setTransferenceNotes] = useState<string>('');
   const [riskAssessmentNotes, setRiskAssessmentNotes] = useState<string>('');
 
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [draftNotice, setDraftNotice] = useState<string | null>(null);
+  const [draftReady, setDraftReady] = useState(false);
+  const draftKey = `psi_draft_form_${sessionToEdit?.id || 'new'}`;
+
+  // Só reinicializa o formulário ao ABRIR ou trocar de sessão. Antes, dependia de `patients`/`sessions`,
+  // então qualquer atualização em tempo real (ex.: paciente respondendo um exercício) apagava o texto digitado.
+  const latestPatientsRef = React.useRef(patients);
+  latestPatientsRef.current = patients;
+
   useEffect(() => {
+    if (!isOpen) {
+      setDraftReady(false);
+      return;
+    }
+    setSaveError(null);
+    setDraftNotice(null);
+
+    if (!sessionToEdit) {
+      const draft = loadDraft<SessionFormDraft>(draftKey);
+      if (draft) {
+        const d = draft.data;
+        setSelectedPatientId(d.selectedPatientId || patientId || latestPatientsRef.current[0]?.id || '');
+        setSessionDate(d.sessionDate || toLocalDateTimeInput());
+        setDurationMinutes(d.durationMinutes || 50);
+        setModality(d.modality || 'online');
+        setMainTopics(d.mainTopics || '');
+        setSummary(d.summary || '');
+        setInterventionsUsed(d.interventionsUsed || '');
+        setEvolutionObserved(d.evolutionObserved || '');
+        setHomeworkAssigned(d.homeworkAssigned || '');
+        setNextSessionPlan(d.nextSessionPlan || '');
+        setPrivateClinicalHypothesis(d.privateClinicalHypothesis || '');
+        setSupervisionNotes(d.supervisionNotes || '');
+        setTransferenceNotes(d.transferenceNotes || '');
+        setRiskAssessmentNotes(d.riskAssessmentNotes || '');
+        setDraftNotice(`Rascunho recuperado (salvo em ${new Date(draft.savedAt).toLocaleString('pt-BR')}).`);
+        setDraftReady(true);
+        return;
+      }
+    }
+
     if (sessionToEdit) {
       setSelectedPatientId(sessionToEdit.patient_id);
-      setSessionDate(new Date(sessionToEdit.session_date).toISOString().slice(0, 16));
+      setSessionDate(toLocalDateTimeInput(sessionToEdit.session_date));
       setDurationMinutes(sessionToEdit.duration_minutes);
       setModality(sessionToEdit.modality);
       setMainTopics(sessionToEdit.main_topics?.join(', ') || '');
@@ -60,8 +121,8 @@ export const SessionFormModal: React.FC<SessionFormModalProps> = ({
         setRiskAssessmentNotes(sessionToEdit.private_notes.risk_assessment_notes || '');
       }
     } else {
-      setSelectedPatientId(patientId || patients[0]?.id || '');
-      setSessionDate(new Date().toISOString().slice(0, 16));
+      setSelectedPatientId(patientId || latestPatientsRef.current[0]?.id || '');
+      setSessionDate(toLocalDateTimeInput());
       setDurationMinutes(50);
       setModality('online');
       setMainTopics('');
@@ -75,15 +136,45 @@ export const SessionFormModal: React.FC<SessionFormModalProps> = ({
       setTransferenceNotes('');
       setRiskAssessmentNotes('');
     }
-  }, [sessionToEdit, patientId, patients, isOpen]);
+    setDraftReady(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionToEdit?.id, patientId, isOpen]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // Autosave do rascunho (apenas para novos registros)
+  useEffect(() => {
+    if (!isOpen || !draftReady || sessionToEdit) return;
+    const hasContent = [summary, mainTopics, interventionsUsed, evolutionObserved, homeworkAssigned, nextSessionPlan,
+      privateClinicalHypothesis, supervisionNotes, transferenceNotes, riskAssessmentNotes].some(v => v.trim().length > 0);
+    if (!hasContent) {
+      clearDraft(draftKey);
+      return;
+    }
+    saveDraft<SessionFormDraft>(draftKey, {
+      selectedPatientId, sessionDate, durationMinutes, modality, mainTopics, summary, interventionsUsed,
+      evolutionObserved, homeworkAssigned, nextSessionPlan, privateClinicalHypothesis, supervisionNotes,
+      transferenceNotes, riskAssessmentNotes,
+    });
+  }, [isOpen, draftReady, sessionToEdit, draftKey, selectedPatientId, sessionDate, durationMinutes, modality, mainTopics,
+    summary, interventionsUsed, evolutionObserved, homeworkAssigned, nextSessionPlan, privateClinicalHypothesis,
+    supervisionNotes, transferenceNotes, riskAssessmentNotes]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedPatientId || !summary) return;
+    if (isSaving) return;
+    if (!selectedPatientId) {
+      setSaveError('Selecione o paciente.');
+      return;
+    }
+    if (!summary.trim()) {
+      setSaveError('O resumo da sessão é obrigatório.');
+      return;
+    }
 
     const patient = patients.find(p => p.id === selectedPatientId);
     const patientSessions = sessions.filter(s => s.patient_id === selectedPatientId);
-    const sessionNumber = sessionToEdit ? sessionToEdit.session_number : patientSessions.length + 1;
+    const sessionNumber = sessionToEdit
+      ? sessionToEdit.session_number
+      : Math.max(0, ...patientSessions.map(s => s.session_number || 0)) + 1;
 
     const topicsArray = mainTopics
       .split(',')
@@ -113,8 +204,26 @@ export const SessionFormModal: React.FC<SessionFormModalProps> = ({
       risk_assessment_notes: riskAssessmentNotes,
     };
 
+    setIsSaving(true);
+    setSaveError(null);
+
+    let result;
+    try {
+      result = sessionToEdit
+        ? await updateSession(sessionToEdit.id, sessionData, privateNotesData)
+        : await addSession(sessionData, privateNotesData);
+    } catch (err: any) {
+      result = { ok: false, error: `Erro inesperado ao gravar: ${err?.message || err}` };
+    }
+    setIsSaving(false);
+
+    if (!result.ok) {
+      // O formulário permanece aberto com todo o texto; nada foi descartado.
+      setSaveError(result.error || 'Não foi possível gravar o registro. Tente novamente.');
+      return;
+    }
+
     if (sessionToEdit) {
-      updateSession(sessionToEdit.id, sessionData, privateNotesData);
       addNotification({
         recipient_role: 'psychologist',
         title: 'Sessão Atualizada com Sucesso',
@@ -123,7 +232,7 @@ export const SessionFormModal: React.FC<SessionFormModalProps> = ({
         read: false,
       });
     } else {
-      addSession(sessionData, privateNotesData);
+      clearDraft(draftKey);
       addNotification({
         recipient_role: 'psychologist',
         title: 'Nova Sessão Registrada',
@@ -371,14 +480,26 @@ export const SessionFormModal: React.FC<SessionFormModalProps> = ({
           </div>
         </div>
 
+        {saveError && (
+          <div role="alert" className="bg-rose-50 border border-rose-200 text-rose-800 px-4 py-3 rounded-xl flex items-start gap-2 text-sm">
+            <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+            <span><strong>O registro NÃO foi gravado.</strong> {saveError} Seu texto continua preservado.</span>
+          </div>
+        )}
+        {draftNotice && !saveError && (
+          <div className="bg-sky-50 border border-sky-200 text-sky-800 px-4 py-2 rounded-xl text-xs">
+            {draftNotice} O texto é salvo automaticamente neste navegador enquanto você digita.
+          </div>
+        )}
+
         {/* Rodapé e Ações */}
         <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
           <Button type="button" variant="outline" size="md" onClick={onClose}>
-            Cancelar
+            {sessionToEdit ? 'Cancelar' : 'Fechar (mantém rascunho)'}
           </Button>
-          <Button type="submit" variant="primary" size="md" className="font-semibold">
-            <CheckCircle className="w-4 h-4 mr-1.5" />
-            {sessionToEdit ? 'Atualizar Sessão' : 'Salvar Registro de Sessão'}
+          <Button type="submit" variant="primary" size="md" className="font-semibold" isLoading={isSaving}>
+            {!isSaving && <CheckCircle className="w-4 h-4 mr-1.5" />}
+            {isSaving ? 'Gravando...' : sessionToEdit ? 'Atualizar Sessão' : 'Salvar Registro de Sessão'}
           </Button>
         </div>
       </form>

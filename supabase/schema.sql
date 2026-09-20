@@ -66,6 +66,15 @@ CREATE TABLE IF NOT EXISTS psychologists (
     UNIQUE(crp_number, crp_state)
 );
 
+-- Grupos de pacientes (gerenciáveis por psicólogo; migração 06)
+CREATE TABLE IF NOT EXISTS patient_groups (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    psychologist_id UUID NOT NULL REFERENCES psychologists(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (psychologist_id, name)
+);
+
 -- Pacientes (Carteira de Clientes)
 CREATE TABLE IF NOT EXISTS patients (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -83,6 +92,39 @@ CREATE TABLE IF NOT EXISTS patients (
     started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     ended_at TIMESTAMPTZ,
     clinical_notes_overview TEXT,
+    -- Cadastro completo (migração 06)
+    group_id UUID REFERENCES patient_groups(id) ON DELETE SET NULL,
+    mobile TEXT,
+    landline TEXT,
+    cpf TEXT,
+    rg TEXT,
+    has_social_name BOOLEAN NOT NULL DEFAULT FALSE,
+    country TEXT DEFAULT 'Brasil',
+    zip_code TEXT,
+    city TEXT,
+    state TEXT,
+    street TEXT,
+    address_number TEXT,
+    neighborhood TEXT,
+    address_complement TEXT,
+    birthplace TEXT,
+    education_level TEXT,
+    race TEXT,
+    occupation TEXT,
+    relative_name TEXT,
+    relative_relationship TEXT,
+    relative_phone TEXT,
+    how_found_us TEXT,
+    referred_by TEXT,
+    tags TEXT[] NOT NULL DEFAULT '{}',
+    guardian_name TEXT,
+    guardian_email TEXT,
+    guardian_mobile TEXT,
+    guardian_cpf TEXT,
+    guardian_rg TEXT,
+    guardian_birth_date DATE,
+    guardian_allow_billing_contact BOOLEAN NOT NULL DEFAULT FALSE,
+    guardian_send_reminders BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -334,6 +376,7 @@ CREATE INDEX IF NOT EXISTS idx_assigned_exercises_patient ON assigned_exercises(
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE psychologists ENABLE ROW LEVEL SECURITY;
 ALTER TABLE patients ENABLE ROW LEVEL SECURITY;
+ALTER TABLE patient_groups ENABLE ROW LEVEL SECURITY; -- políticas: migração 06
 ALTER TABLE appointments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE therapy_sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE session_private_notes ENABLE ROW LEVEL SECURITY;

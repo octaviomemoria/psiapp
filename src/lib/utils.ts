@@ -53,3 +53,27 @@ export function formatRelativeDate(dateString?: string | null): string {
     return dateString;
   }
 }
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function isUuid(value?: string | null): boolean {
+  return typeof value === "string" && UUID_RE.test(value);
+}
+
+/** UUID v4 gerado no cliente, para que o id seja o mesmo na tela e no banco. */
+export function newUuid(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}
+
+/** Valor para <input type="datetime-local"> no fuso horário local (toISOString usaria UTC). */
+export function toLocalDateTimeInput(date: Date | string = new Date()): string {
+  const d = typeof date === "string" ? new Date(date) : date;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}

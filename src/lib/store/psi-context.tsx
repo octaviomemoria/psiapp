@@ -5,6 +5,7 @@ import {
   UserProfile,
   Psychologist,
   Patient,
+  PatientGroup,
   Appointment,
   TherapySession,
   SessionPrivateNotes,
@@ -64,7 +65,9 @@ import {
   INITIAL_PATIENT_PACKAGES
 } from './initial-data';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
-import { SupabaseService } from '@/lib/supabase/service';
+import { SupabaseService, WriteResult } from '@/lib/supabase/service';
+import { newUuid } from '@/lib/utils';
+import { getBillingResponsible } from '@/lib/utils/patient';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 
 interface PsiContextType {
@@ -84,6 +87,7 @@ interface PsiContextType {
 
   // Coleções de Dados Clínicos
   patients: Patient[];
+  patientGroups: PatientGroup[];
   appointments: Appointment[];
   sessions: TherapySession[];
   goals: Goal[];
@@ -127,10 +131,15 @@ interface PsiContextType {
 
   // Ações do Psicólogo
   addPatient: (patient: Omit<Patient, 'id' | 'started_at'>) => Patient;
-  updatePatient: (id: string, updates: Partial<Patient>) => void;
+  /** Só confirma (ok: true) depois que o banco gravou; se falhar, desfaz a alteração na tela. */
+  updatePatient: (id: string, updates: Partial<Patient>) => Promise<WriteResult>;
   deletePatient: (id: string) => void;
-  addSession: (session: Omit<TherapySession, 'id' | 'created_at'>, privateNotes?: Omit<SessionPrivateNotes, 'id' | 'session_id' | 'psychologist_id' | 'patient_id' | 'created_at' | 'updated_at'>) => void;
-  updateSession: (id: string, updates: Partial<TherapySession>, privateNotesUpdates?: Partial<SessionPrivateNotes>) => void;
+  addPatientGroup: (name: string) => Promise<WriteResult<PatientGroup>>;
+  renamePatientGroup: (id: string, name: string) => Promise<WriteResult>;
+  deletePatientGroup: (id: string) => Promise<WriteResult>;
+  /** Só confirma (ok: true) depois que o banco gravou; em modo demo grava apenas na memória. */
+  addSession: (session: Omit<TherapySession, 'id' | 'created_at'>, privateNotes?: Omit<SessionPrivateNotes, 'id' | 'session_id' | 'psychologist_id' | 'patient_id' | 'created_at' | 'updated_at'>) => Promise<WriteResult>;
+  updateSession: (id: string, updates: Partial<TherapySession>, privateNotesUpdates?: Partial<SessionPrivateNotes>) => Promise<WriteResult>;
   deleteSession: (id: string) => void;
   addAppointment: (appointment: Omit<Appointment, 'id'>) => void;
   updateAppointmentStatus: (id: string, status: AppointmentStatus, cancellationReason?: string) => void;
@@ -211,6 +220,7 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [currentPatientId, setCurrentPatientId] = useState<string>(INITIAL_PATIENTS[0]?.id || '');
 
   const [patients, setPatients] = useState<Patient[]>(INITIAL_PATIENTS);
+  const [patientGroups, setPatientGroups] = useState<PatientGroup[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>(INITIAL_APPOINTMENTS);
   const [sessions, setSessions] = useState<TherapySession[]>(INITIAL_SESSIONS);
   const [goals, setGoals] = useState<Goal[]>(INITIAL_GOALS);
@@ -241,6 +251,11 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const isLiveProduction = activeDataSource === 'supabase_live' || Boolean(authUser);
 
+  // Registros gravados há pouco: protegem contra um recarregamento em tempo real que tenha lido o banco antes do commit.
+  const RECENT_WINDOW_MS = 2 * 60 * 1000;
+  const recentSessionsRef = useRef<Map<string, { item: TherapySession; at: number }>>(new Map());
+  const recentPatientsRef = useRef<Map<string, { item: Patient; at: number }>>(new Map());
+
   const resetToDemoData = useCallback(() => {
     if (typeof window !== 'undefined') {
       localStorage.setItem(DATA_SOURCE_KEY, 'supabase_live');
@@ -253,6 +268,7 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setCurrentRole('psychologist');
     setCurrentPsychologist(INITIAL_PSYCHOLOGIST);
     setPatients(INITIAL_PATIENTS);
+    setPatientGroups([]);
     setAppointments(INITIAL_APPOINTMENTS);
     setSessions(INITIAL_SESSIONS);
     setGoals(INITIAL_GOALS);
@@ -318,7 +334,8 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             liveInvites,
             liveCategories,
             liveTransactions,
-            livePackages
+            livePackages,
+            liveGroups
           ] = await Promise.all([
             SupabaseService.getPatients(psychologist.id),
             SupabaseService.getAppointments(psychologist.id),
@@ -335,17 +352,33 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             SupabaseService.getFinancialCategories(psychologist.id),
             SupabaseService.getFinancialTransactions(psychologist.id),
             SupabaseService.getPatientPackages(psychologist.id),
+            SupabaseService.getPatientGroups(psychologist.id),
           ]);
 
-          setPatients(livePatients || []);
-          if (livePatients && livePatients.length > 0) {
-            setCurrentPatientId(livePatients[0].id);
-          } else {
-            setCurrentPatientId('');
+          // null = consulta falhou (ex.: migração 06 pendente): não apaga os grupos já carregados.
+          if (liveGroups) setPatientGroups(liveGroups);
+
+          // null = a consulta falhou: mantém o que já está na tela em vez de apagar tudo.
+          if (livePatients) {
+            const now = Date.now();
+            const liveIds = new Set(livePatients.map(p => p.id));
+            const pendingLocal = [...recentPatientsRef.current.values()]
+              .filter(r => now - r.at < RECENT_WINDOW_MS && !liveIds.has(r.item.id))
+              .map(r => r.item);
+            const merged = [...pendingLocal, ...livePatients];
+            setPatients(merged);
+            setCurrentPatientId(prev => (prev && merged.some(p => p.id === prev)) ? prev : (merged[0]?.id || ''));
           }
 
           setAppointments(liveAppointments || []);
-          setSessions(liveSessions || []);
+          if (liveSessions) {
+            const now = Date.now();
+            const liveIds = new Set(liveSessions.map(s => s.id));
+            const pendingLocal = [...recentSessionsRef.current.values()]
+              .filter(r => now - r.at < RECENT_WINDOW_MS && !liveIds.has(r.item.id))
+              .map(r => r.item);
+            setSessions([...pendingLocal, ...liveSessions]);
+          }
           setGoals(liveGoals || []);
           setAssignedExercises(liveExercises || []);
           if (liveTemplates && liveTemplates.length > 0) {
@@ -410,6 +443,7 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setCurrentRole('psychologist');
     setActiveDataSource('supabase_live');
     setPatients([]);
+    setPatientGroups([]);
     setAppointments([]);
     setSessions([]);
     setGoals([]);
@@ -520,6 +554,7 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (saved) {
           const parsed = JSON.parse(saved);
           if (parsed.patients) setPatients(parsed.patients);
+          if (parsed.patientGroups) setPatientGroups(parsed.patientGroups);
           if (parsed.appointments) setAppointments(parsed.appointments);
           if (parsed.sessions) setSessions(parsed.sessions);
           if (parsed.goals) setGoals(parsed.goals);
@@ -558,6 +593,7 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.setItem(DATA_SOURCE_KEY, activeDataSource);
       const stateToSave = {
         patients,
+        patientGroups,
         appointments,
         sessions,
         goals,
@@ -590,6 +626,7 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [
     patients,
+    patientGroups,
     appointments,
     sessions,
     goals,
@@ -687,7 +724,8 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const addPatient = useCallback((patientData: Omit<Patient, 'id' | 'started_at'>): Patient => {
     const psychId = patientData.psychologist_id || currentPsychologist.id;
-    const newId = `pat-${Date.now()}`;
+    // UUID definitivo desde o início: o mesmo id vale na tela e no banco (sem id temporário para reconciliar).
+    const newId = newUuid();
     const newPatient: Patient = {
       ...patientData,
       psychologist_id: psychId,
@@ -703,35 +741,125 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updated_at: new Date().toISOString(),
       }
     };
-    
+
     // Atualização otimista no estado da aplicação
     setPatients(prev => [newPatient, ...prev]);
     setCurrentPatientId(newPatient.id);
 
-    // Sincronização direta com o Supabase e reconciliação com UUID real
     if (isSupabaseConfigured && isLiveProduction) {
+      recentPatientsRef.current.set(newId, { item: newPatient, at: Date.now() });
       SupabaseService.insertPatient({
         ...patientData,
+        id: newId,
         psychologist_id: psychId,
         status: 'active',
-        started_at: new Date().toISOString()
-      }, psychId).then(realPatient => {
-        if (realPatient && realPatient.id) {
-          setPatients(prev => prev.map(p => p.id === newId ? { ...p, id: realPatient.id } : p));
-          setCurrentPatientId(prev => prev === newId ? realPatient.id : prev);
-        }
+        started_at: newPatient.started_at
+      }, psychId).then(result => {
+        if (result.ok) return;
+        // Falhou: não deixa um paciente "fantasma" na lista (sessões dele nunca seriam gravadas).
+        recentPatientsRef.current.delete(newId);
+        setPatients(prev => prev.filter(p => p.id !== newId));
+        setCurrentPatientId(prev => prev === newId ? '' : prev);
+        setNotifications(prev => [{
+          id: `notif-${Date.now()}-err`,
+          recipient_role: 'psychologist',
+          title: `Paciente ${patientData.full_name} NÃO foi salvo`,
+          message: result.error || 'Falha ao gravar no banco. Cadastre novamente.',
+          type: 'feedback_received',
+          read: false,
+          created_at: new Date().toISOString()
+        }, ...prev]);
       });
     }
 
     return newPatient;
   }, [isLiveProduction, currentPsychologist]);
 
-  const updatePatient = useCallback((id: string, updates: Partial<Patient>) => {
+  const patientsRef = useRef<Patient[]>(patients);
+  patientsRef.current = patients;
+
+  const updatePatient = useCallback(async (id: string, updates: Partial<Patient>): Promise<WriteResult> => {
+    const previous = patientsRef.current.find(p => p.id === id);
     setPatients(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
-    if (isSupabaseConfigured && isLiveProduction) {
-      SupabaseService.updatePatient(id, updates);
+    if (!(isSupabaseConfigured && isLiveProduction)) return { ok: true };
+
+    const result = await SupabaseService.updatePatient(id, updates);
+    if (!result.ok && previous) {
+      // Falhou no banco: devolve só os campos que foram alterados, para a tela não mostrar dado que não foi salvo.
+      const restored: Record<string, any> = {};
+      for (const key of Object.keys(updates)) restored[key] = (previous as any)[key];
+      setPatients(prev => prev.map(p => p.id === id ? { ...p, ...restored } : p));
+      setNotifications(prev => [{
+        id: `notif-${Date.now()}-err`,
+        recipient_role: 'psychologist',
+        title: `Alterações de ${previous.full_name} NÃO foram salvas`,
+        message: result.error || 'Falha ao gravar no banco. Tente novamente.',
+        type: 'feedback_received',
+        read: false,
+        created_at: new Date().toISOString()
+      }, ...prev]);
     }
+    return result;
   }, [isLiveProduction]);
+
+  const addPatientGroup = useCallback(async (name: string): Promise<WriteResult<PatientGroup>> => {
+    const trimmed = name.trim();
+    if (!trimmed) return { ok: false, error: 'Informe o nome do grupo.' };
+    if (patientGroups.some(g => g.name.toLowerCase() === trimmed.toLowerCase())) {
+      return { ok: false, error: 'Já existe um grupo com esse nome.' };
+    }
+    const group: PatientGroup = {
+      id: newUuid(),
+      psychologist_id: currentPsychologist.id,
+      name: trimmed,
+      created_at: new Date().toISOString(),
+    };
+    setPatientGroups(prev => [...prev, group].sort((a, b) => a.name.localeCompare(b.name)));
+    if (isSupabaseConfigured && isLiveProduction) {
+      const result = await SupabaseService.insertPatientGroup(group);
+      if (!result.ok) {
+        setPatientGroups(prev => prev.filter(g => g.id !== group.id));
+        return { ok: false, error: result.error };
+      }
+    }
+    return { ok: true, data: group };
+  }, [patientGroups, currentPsychologist, isLiveProduction]);
+
+  const renamePatientGroup = useCallback(async (id: string, name: string): Promise<WriteResult> => {
+    const trimmed = name.trim();
+    if (!trimmed) return { ok: false, error: 'Informe o nome do grupo.' };
+    if (patientGroups.some(g => g.id !== id && g.name.toLowerCase() === trimmed.toLowerCase())) {
+      return { ok: false, error: 'Já existe um grupo com esse nome.' };
+    }
+    const previous = patientGroups.find(g => g.id === id);
+    setPatientGroups(prev => prev.map(g => g.id === id ? { ...g, name: trimmed } : g).sort((a, b) => a.name.localeCompare(b.name)));
+    if (isSupabaseConfigured && isLiveProduction) {
+      const result = await SupabaseService.updatePatientGroup(id, trimmed);
+      if (!result.ok && previous) {
+        setPatientGroups(prev => prev.map(g => g.id === id ? previous : g));
+        return result;
+      }
+    }
+    return { ok: true };
+  }, [patientGroups, isLiveProduction]);
+
+  const deletePatientGroup = useCallback(async (id: string): Promise<WriteResult> => {
+    const previous = patientGroups.find(g => g.id === id);
+    if (!previous) return { ok: true };
+    const affected = patientsRef.current.filter(p => p.group_id === id).map(p => p.id);
+    setPatientGroups(prev => prev.filter(g => g.id !== id));
+    // O banco faz ON DELETE SET NULL; a tela acompanha.
+    setPatients(prev => prev.map(p => p.group_id === id ? { ...p, group_id: null } : p));
+    if (isSupabaseConfigured && isLiveProduction) {
+      const result = await SupabaseService.deletePatientGroup(id);
+      if (!result.ok) {
+        setPatientGroups(prev => [...prev, previous].sort((a, b) => a.name.localeCompare(b.name)));
+        setPatients(prev => prev.map(p => affected.includes(p.id) ? { ...p, group_id: id } : p));
+        return result;
+      }
+    }
+    return { ok: true };
+  }, [patientGroups, isLiveProduction]);
 
   const deletePatient = useCallback((id: string) => {
     setPatients(prev => prev.filter(p => p.id !== id));
@@ -743,74 +871,87 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [currentPatientId, isLiveProduction]);
 
-  const addSession = useCallback((
+  const addSession = useCallback(async (
     sessionData: Omit<TherapySession, 'id' | 'created_at'>,
     privateNotesData?: Omit<SessionPrivateNotes, 'id' | 'session_id' | 'psychologist_id' | 'patient_id' | 'created_at' | 'updated_at'>
-  ) => {
-    const tempSessionId = `sess-${Date.now()}`;
+  ): Promise<WriteResult> => {
+    const sessionId = newUuid();
+    const nowIso = new Date().toISOString();
     let privateNotes: SessionPrivateNotes | undefined = undefined;
     if (privateNotesData) {
       privateNotes = {
-        id: `priv-${Date.now()}`,
-        session_id: tempSessionId,
+        id: newUuid(),
+        session_id: sessionId,
         psychologist_id: sessionData.psychologist_id,
         patient_id: sessionData.patient_id,
         private_clinical_hypothesis: privateNotesData.private_clinical_hypothesis || '',
         supervision_notes: privateNotesData.supervision_notes,
         transference_countertransference_notes: privateNotesData.transference_countertransference_notes,
         risk_assessment_notes: privateNotesData.risk_assessment_notes,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+        created_at: nowIso,
+        updated_at: nowIso,
       };
     }
 
     const newSession: TherapySession = {
       ...sessionData,
-      id: tempSessionId,
+      id: sessionId,
+      session_date: sessionData.session_date || nowIso,
       private_notes: privateNotes,
-      created_at: new Date().toISOString(),
+      created_at: nowIso,
     };
 
-    setSessions(prev => [newSession, ...prev]);
-
-    // Sincronizar com Supabase e reconciliar ID e notas privadas
+    // Registro clínico: só entra na tela como "salvo" depois que o banco confirmar.
     if (isSupabaseConfigured && isLiveProduction) {
-      SupabaseService.insertSession({
-        ...sessionData,
-        status: 'finalized',
-        session_date: sessionData.session_date || new Date().toISOString()
-      }, privateNotesData).then(realSession => {
-        if (realSession && realSession.id) {
-          setSessions(prev => prev.map(s => s.id === tempSessionId ? realSession : s));
-        }
-      });
+      const result = await SupabaseService.insertSession(newSession, privateNotes);
+      if (!result.ok) return result;
+      recentSessionsRef.current.set(sessionId, { item: newSession, at: Date.now() });
     }
+
+    setSessions(prev => [newSession, ...prev.filter(s => s.id !== sessionId)]);
+    return { ok: true };
   }, [isLiveProduction]);
 
-  const updateSession = useCallback((
+  const updateSession = useCallback(async (
     id: string,
     updates: Partial<TherapySession>,
     privateNotesUpdates?: Partial<SessionPrivateNotes>
-  ) => {
-    setSessions(prev => prev.map(s => {
-      if (s.id !== id) return s;
-      const updatedPrivateNotes = privateNotesUpdates && s.private_notes ? {
-        ...s.private_notes,
-        ...privateNotesUpdates,
-        updated_at: new Date().toISOString()
-      } : s.private_notes;
-
-      return {
-        ...s,
-        ...updates,
-        private_notes: updatedPrivateNotes,
-      };
-    }));
+  ): Promise<WriteResult> => {
+    const current = sessions.find(s => s.id === id);
 
     if (isSupabaseConfigured && isLiveProduction) {
-      SupabaseService.updateSession(id, updates, privateNotesUpdates);
+      const result = await SupabaseService.updateSession(
+        id,
+        updates,
+        privateNotesUpdates,
+        current ? { psychologist_id: current.psychologist_id, patient_id: current.patient_id } : undefined
+      );
+      if (!result.ok) return result;
     }
-  }, [isLiveProduction]);
+
+    setSessions(prev => prev.map(s => {
+      if (s.id !== id) return s;
+      let updatedPrivateNotes = s.private_notes;
+      if (privateNotesUpdates) {
+        updatedPrivateNotes = s.private_notes
+          ? { ...s.private_notes, ...privateNotesUpdates, updated_at: new Date().toISOString() }
+          : {
+              id: newUuid(),
+              session_id: s.id,
+              psychologist_id: s.psychologist_id,
+              patient_id: s.patient_id,
+              private_clinical_hypothesis: privateNotesUpdates.private_clinical_hypothesis || '',
+              supervision_notes: privateNotesUpdates.supervision_notes,
+              transference_countertransference_notes: privateNotesUpdates.transference_countertransference_notes,
+              risk_assessment_notes: privateNotesUpdates.risk_assessment_notes,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            };
+      }
+      return { ...s, ...updates, private_notes: updatedPrivateNotes };
+    }));
+    return { ok: true };
+  }, [isLiveProduction, sessions]);
 
   const deleteSession = useCallback((id: string) => {
     setSessions(prev => prev.filter(s => s.id !== id));
@@ -908,8 +1049,8 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             status: isPaid ? 'completed' : 'pending',
             payment_method: paymentStatus === 'paid_pix' ? 'pix' : paymentStatus === 'paid_card' ? 'credit_card' : paymentStatus === 'insurance' ? 'insurance_reimbursement' : 'pix',
             receipt_number: generatedReceipt,
-            financial_responsible_name: (patient as any)?.financial_responsible_name || patient?.full_name || apt.patient_name,
-            financial_responsible_cpf: (patient as any)?.financial_responsible_cpf || (patient as any)?.cpf,
+            financial_responsible_name: getBillingResponsible(patient, apt.patient_name || 'Paciente').name,
+            financial_responsible_cpf: getBillingResponsible(patient).cpf,
             is_tax_deductible: false,
             created_at: nowIso,
             updated_at: nowIso
@@ -1158,7 +1299,7 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       full_name: invite.patient_name,
       email: invite.patient_email,
       phone: invite.patient_phone,
-      birth_date: '1995-01-01',
+      birth_date: '',
       gender: 'Não informado',
       status: 'active',
       clinical_notes_overview: 'Paciente cadastrado via convite de onboarding seguro.'
@@ -1527,8 +1668,8 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       paid_at: isPaid ? nowIso : undefined,
       status: isPaid ? 'completed' : 'pending',
       payment_method: 'pix',
-      financial_responsible_name: (patient as any)?.financial_responsible_name || patient?.full_name,
-      financial_responsible_cpf: (patient as any)?.financial_responsible_cpf || (patient as any)?.cpf,
+      financial_responsible_name: patient ? getBillingResponsible(patient).name : undefined,
+      financial_responsible_cpf: getBillingResponsible(patient).cpf,
       is_tax_deductible: false,
     });
 
@@ -1583,6 +1724,7 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         toggleDataSource,
         signOut,
         patients,
+        patientGroups,
         appointments,
         sessions,
         goals,
@@ -1620,6 +1762,9 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addPatient,
         updatePatient,
         deletePatient,
+        addPatientGroup,
+        renamePatientGroup,
+        deletePatientGroup,
         addSession,
         updateSession,
         deleteSession,

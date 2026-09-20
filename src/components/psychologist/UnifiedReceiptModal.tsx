@@ -6,6 +6,7 @@ import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { FileText, Printer, Calendar, User, CheckCircle2 } from 'lucide-react';
 import { formatDate, formatDateTime } from '@/lib/utils';
+import { getBillingResponsible } from '@/lib/utils/patient';
 
 interface UnifiedReceiptModalProps {
   isOpen: boolean;
@@ -158,10 +159,10 @@ export const UnifiedReceiptModal: React.FC<UnifiedReceiptModalProps> = ({
             <p>
               Recebi de{' '}
               <strong>
-                {(selectedPatient as any)?.financial_responsible_name || selectedPatient?.full_name || 'Paciente'}
+                {getBillingResponsible(selectedPatient).name}
               </strong>
-              {((selectedPatient as any)?.financial_responsible_cpf || (selectedPatient as any)?.cpf) && (
-                <>, inscrito(a) no CPF sob o nº <strong>{(selectedPatient as any)?.financial_responsible_cpf || (selectedPatient as any)?.cpf}</strong></>
+              {getBillingResponsible(selectedPatient).cpf && (
+                <>, inscrito(a) no CPF sob o nº <strong>{getBillingResponsible(selectedPatient).cpf}</strong></>
               )}
               , a quantia de{' '}
               <strong className="text-base font-sans">

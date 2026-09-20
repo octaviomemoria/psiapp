@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { SupabaseService } from '@/lib/supabase/service';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -29,18 +30,56 @@ export const CalendarSyncModal: React.FC<CalendarSyncModalProps> = ({ isOpen, on
   const [activeTab, setActiveTab] = useState<'iphone' | 'google' | 'oauth'>('iphone');
   const [copied, setCopied] = useState(false);
 
+  // O link do feed contém um token secreto por psicólogo (gerado no banco). Quem tem o link vê a agenda.
+  const [feedToken, setFeedToken] = useState<string | null>(null);
+  const [feedLoading, setFeedLoading] = useState(false);
+  const [feedError, setFeedError] = useState<string | null>(null);
+
+  const loadFeedToken = async (rotate: boolean) => {
+    setFeedLoading(true);
+    setFeedError(null);
+    const result = await SupabaseService.getCalendarFeedToken(rotate);
+    if (result.ok && result.data) {
+      setFeedToken(result.data);
+    } else {
+      setFeedToken(null);
+      setFeedError(result.error || 'Não foi possível gerar o link da agenda.');
+    }
+    setFeedLoading(false);
+  };
+
+  useEffect(() => {
+    if (isOpen && currentPsychologist?.id) {
+      loadFeedToken(false);
+    }
+    if (!isOpen) {
+      setFeedToken(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, currentPsychologist?.id]);
+
+  const handleRotateToken = () => {
+    if (window.confirm('Gerar um novo link vai INVALIDAR o link atual: a agenda deixará de aparecer nos calendários já assinados até você assinar o novo link. Continuar?')) {
+      loadFeedToken(true);
+    }
+  };
+
   // Determinar URL base
   const origin = typeof window !== 'undefined' ? window.location.origin : 'https://psiappgestao.vercel.app';
-  const feedHttpsUrl = `${origin}/api/calendar/feed?psychologistId=${currentPsychologist?.id || 'default'}`;
+  const feedHttpsUrl = feedToken
+    ? `${origin}/api/calendar/feed?token=${feedToken}`
+    : feedLoading ? 'Gerando link seguro...' : 'Link indisponível';
   const feedWebcalUrl = feedHttpsUrl.replace(/^https?:\/\//, 'webcal://');
 
   const handleCopyLink = () => {
+    if (!feedToken) return;
     navigator.clipboard.writeText(feedHttpsUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
   };
 
   const handleOpenIphoneSubscribe = () => {
+    if (!feedToken) return;
     window.location.href = feedWebcalUrl;
   };
 
@@ -64,6 +103,28 @@ export const CalendarSyncModal: React.FC<CalendarSyncModalProps> = ({ isOpen, on
               Assine o feed da sua agenda uma única vez no seu iPhone ou Google Agenda. Sempre que você marcar ou alterar uma sessão no PsiApp, seu celular atualizará automaticamente com lembretes na tela bloqueada!
             </p>
           </div>
+        </div>
+
+        {/* Segurança do link */}
+        <div className={`rounded-2xl border p-3 text-[11px] leading-relaxed flex flex-col sm:flex-row sm:items-center justify-between gap-2 ${feedError ? 'bg-rose-50 border-rose-200 text-rose-800' : 'bg-amber-50 border-amber-200 text-amber-900'}`}>
+          <span>
+            {feedError
+              ? <><strong>Não foi possível gerar o link.</strong> {feedError}</>
+              : <><strong>Este link é secreto.</strong> Quem o tiver consegue ver seus horários e os primeiros nomes dos pacientes. Não compartilhe. Se ele vazar, gere um novo.</>}
+          </span>
+          <span className="flex gap-2 shrink-0">
+            {feedError && (
+              <Button variant="outline" size="sm" onClick={() => loadFeedToken(false)} disabled={feedLoading}>
+                Tentar novamente
+              </Button>
+            )}
+            {feedToken && (
+              <Button variant="outline" size="sm" onClick={handleRotateToken} disabled={feedLoading}>
+                <RefreshCw className="w-3 h-3 mr-1" />
+                Gerar novo link
+              </Button>
+            )}
+          </span>
         </div>
 
         {/* Seletor de Abas */}
@@ -122,6 +183,7 @@ export const CalendarSyncModal: React.FC<CalendarSyncModalProps> = ({ isOpen, on
                   variant="primary"
                   size="sm"
                   onClick={handleOpenIphoneSubscribe}
+                  disabled={!feedToken}
                   className="bg-slate-900 text-white hover:bg-slate-800 font-semibold shadow-xs shrink-0"
                 >
                   <Smartphone className="w-3.5 h-3.5 mr-1.5" />
@@ -142,6 +204,7 @@ export const CalendarSyncModal: React.FC<CalendarSyncModalProps> = ({ isOpen, on
                     variant="outline"
                     size="sm"
                     onClick={handleCopyLink}
+                    disabled={!feedToken}
                     className="shrink-0 text-xs font-semibold"
                   >
                     {copied ? (
@@ -205,6 +268,7 @@ export const CalendarSyncModal: React.FC<CalendarSyncModalProps> = ({ isOpen, on
                     variant="outline"
                     size="sm"
                     onClick={handleCopyLink}
+                    disabled={!feedToken}
                     className="shrink-0 text-xs font-semibold"
                   >
                     {copied ? (

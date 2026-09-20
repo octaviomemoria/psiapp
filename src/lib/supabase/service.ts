@@ -3,6 +3,7 @@ import {
   UserProfile,
   Psychologist,
   Patient,
+  PatientGroup,
   Appointment,
   TherapySession,
   SessionPrivateNotes,
@@ -19,6 +20,94 @@ import {
   FinancialTransaction,
   PatientPackage
 } from '@/types/database';
+
+import { isUuid } from '@/lib/utils';
+
+export interface WriteResult<T = undefined> {
+  ok: boolean;
+  data?: T;
+  /** Mensagem legível para exibir ao usuário. */
+  error?: string;
+}
+
+export interface AdminAuditRow {
+  id: string;
+  table_name: string;
+  record_id: string;
+  action: 'INSERT' | 'UPDATE' | 'DELETE' | 'ACCESS' | 'EXPORT';
+  performed_by: string | null;
+  actor_role: string | null;
+  created_at: string;
+  /** Somente nomes de colunas alteradas (UPDATE); nunca valores. */
+  changed_columns: string[] | null;
+}
+
+/** Traduz erros do PostgREST/Postgres para uma mensagem que orienta o usuário. */
+function describeDbError(err: { code?: string; message?: string } | null | undefined, action: string): string {
+  const code = err?.code;
+  const msg = err?.message || 'erro desconhecido';
+  if (code === '42501' || /row-level security/i.test(msg)) {
+    return `${action}: o banco recusou a gravação por permissão (RLS). Saia e entre novamente; se persistir, avise o suporte.`;
+  }
+  if (code === '42703' || code === 'PGRST204' || /column .* does not exist|Could not find the .* column/i.test(msg)) {
+    return `${action}: o banco de dados está desatualizado (falta uma coluna). Aplique a migração 04 e as seguintes (05, 06...) de supabase/migrations no SQL Editor do Supabase. Detalhe: ${msg}`;
+  }
+  if (code === '22P02') {
+    return `${action}: identificador inválido. O cadastro do paciente ou da conta não chegou a ser gravado no banco.`;
+  }
+  if (code === '23503') {
+    return `${action}: o paciente ou psicólogo referenciado não existe no banco.`;
+  }
+  return `${action}: ${msg}`;
+}
+
+const SESSION_COLUMNS = [
+  'id', 'appointment_id', 'psychologist_id', 'patient_id', 'session_number', 'session_date',
+  'duration_minutes', 'modality', 'main_topics', 'summary', 'soap_subjective', 'soap_objective',
+  'soap_assessment', 'soap_plan', 'interventions_used', 'evolution_observed', 'homework_assigned',
+  'next_session_plan', 'status',
+] as const;
+
+/** Mantém somente colunas que existem em therapy_sessions (descarta campos só de tela, como private_notes). */
+function toSessionRow(session: Record<string, any>): Record<string, any> {
+  const row: Record<string, any> = {};
+  for (const col of SESSION_COLUMNS) {
+    if (session[col] !== undefined) row[col] = session[col];
+  }
+  return row;
+}
+
+/** Colunas de texto opcionais de `patients`: string vazia vira NULL no banco. */
+const PATIENT_TEXT_COLUMNS = [
+  'social_name', 'phone', 'emergency_contact_name', 'emergency_contact_phone', 'clinical_notes_overview',
+  'mobile', 'landline', 'cpf', 'rg', 'country', 'zip_code', 'city', 'state', 'street', 'address_number',
+  'neighborhood', 'address_complement', 'birthplace', 'education_level', 'race', 'occupation',
+  'relative_name', 'relative_relationship', 'relative_phone', 'how_found_us', 'referred_by',
+  'guardian_name', 'guardian_email', 'guardian_mobile', 'guardian_cpf', 'guardian_rg',
+] as const;
+
+/** Demais colunas graváveis de `patients` (obrigatórias, datas, booleanos, listas e FKs). */
+const PATIENT_OTHER_COLUMNS = [
+  'full_name', 'birth_date', 'gender', 'email', 'status', 'started_at', 'ended_at', 'group_id',
+  'has_social_name', 'tags', 'guardian_birth_date', 'guardian_allow_billing_contact', 'guardian_send_reminders',
+] as const;
+
+/**
+ * Mantém somente colunas que existem em `patients`. Campos só de tela (profile, psychologist_id,
+ * anamnesis_completed) nunca vão ao banco. Texto vazio vira NULL; data vazia também (sem inventar data).
+ */
+export function toPatientRow(patient: Record<string, any>): Record<string, any> {
+  const row: Record<string, any> = {};
+  for (const col of PATIENT_TEXT_COLUMNS) {
+    if (patient[col] !== undefined) row[col] = patient[col] === '' ? null : patient[col];
+  }
+  for (const col of PATIENT_OTHER_COLUMNS) {
+    if (patient[col] === undefined) continue;
+    const isDate = col === 'birth_date' || col === 'guardian_birth_date' || col === 'ended_at';
+    row[col] = isDate && patient[col] === '' ? null : patient[col];
+  }
+  return row;
+}
 
 export const SupabaseService = {
   // ==========================================
@@ -155,8 +244,9 @@ export const SupabaseService = {
   // ==========================================
   // PACIENTES (MULTI-TENANT REAL POR PSICÓLOGO)
   // ==========================================
-  async getPatients(psychologistId?: string): Promise<Patient[]> {
-    if (!isSupabaseConfigured || !supabase) return [];
+  /** Retorna null quando a consulta falha (diferente de lista vazia), para a tela não apagar dados por erro de rede. */
+  async getPatients(psychologistId?: string): Promise<Patient[] | null> {
+    if (!isSupabaseConfigured || !supabase) return null;
     try {
       if (psychologistId) {
         const { data, error } = await supabase
@@ -165,12 +255,15 @@ export const SupabaseService = {
           .eq('psychologist_id', psychologistId)
           .eq('status', 'active');
 
-        if (!error && data && data.length > 0) {
-          return data
-            .map((rel: any) => rel.patient)
-            .filter(Boolean)
-            .sort((a: Patient, b: Patient) => a.full_name.localeCompare(b.full_name));
+        if (error) {
+          console.warn('Erro ao buscar vínculos de pacientes:', error.message);
+          return null;
         }
+
+        return (data || [])
+          .map((rel: any) => rel.patient)
+          .filter(Boolean)
+          .sort((a: Patient, b: Patient) => a.full_name.localeCompare(b.full_name));
       }
 
       const { data, error } = await supabase
@@ -180,77 +273,151 @@ export const SupabaseService = {
 
       if (error) {
         console.warn('Erro ao buscar pacientes:', error.message);
-        return [];
+        return null;
       }
       return data || [];
     } catch (err) {
       console.warn('Erro de conexão:', err);
-      return [];
-    }
-  },
-
-  async insertPatient(patient: Omit<Patient, 'id' | 'created_at' | 'updated_at'>, psychologistId?: string): Promise<Patient | null> {
-    if (!isSupabaseConfigured || !supabase) return null;
-    try {
-      const payload: any = {
-        full_name: patient.full_name,
-        social_name: patient.social_name || null,
-        birth_date: patient.birth_date || '1995-01-01',
-        gender: patient.gender || 'Não informado',
-        email: patient.email,
-        phone: patient.phone || null,
-        emergency_contact_name: patient.emergency_contact_name || null,
-        emergency_contact_phone: patient.emergency_contact_phone || null,
-        status: patient.status || 'active',
-        started_at: patient.started_at || new Date().toISOString(),
-        clinical_notes_overview: patient.clinical_notes_overview || null
-      };
-
-      const { data, error } = await supabase
-        .from('patients')
-        .insert([payload])
-        .select()
-        .single();
-
-      if (error) {
-        console.error('Erro ao inserir paciente no Supabase:', error.message);
-        return null;
-      }
-
-      // Vincular na tabela psychologist_patient_relationships para garantir isolamento
-      if (data && psychologistId) {
-        await supabase
-          .from('psychologist_patient_relationships')
-          .insert([{
-            psychologist_id: psychologistId,
-            patient_id: data.id,
-            status: 'active',
-            started_at: new Date().toISOString()
-          }]);
-      }
-
-      return data;
-    } catch (err) {
-      console.error('Erro de rede:', err);
       return null;
     }
   },
 
-  async updatePatient(id: string, updates: Partial<Patient>): Promise<boolean> {
-    if (!isSupabaseConfigured || !supabase) return false;
+  /**
+   * Grava paciente + vínculo com o psicólogo.
+   * O id é gerado no cliente e o INSERT não usa RETURNING: a política de leitura de patients
+   * só enxerga pacientes já vinculados, então insert().select() era recusado pelo RLS.
+   */
+  async insertPatient(
+    patient: Omit<Patient, 'created_at' | 'updated_at'> & { id: string },
+    psychologistId: string
+  ): Promise<WriteResult> {
+    if (!isSupabaseConfigured || !supabase) return { ok: false, error: 'Supabase não configurado.' };
+    if (!isUuid(psychologistId)) {
+      return { ok: false, error: 'Sua conta de psicólogo ainda não está sincronizada com o banco. Saia e entre novamente.' };
+    }
+    try {
+      const payload: any = {
+        ...toPatientRow(patient),
+        id: patient.id,
+        // Sem data informada grava NULL: antes o banco recebia 01/01/1995 e a idade ficava falsa.
+        birth_date: patient.birth_date || null,
+        status: patient.status || 'active',
+        started_at: patient.started_at || new Date().toISOString(),
+      };
+
+      const { error: patientErr } = await supabase.from('patients').upsert([payload], { onConflict: 'id' });
+      if (patientErr) {
+        console.error('Erro ao inserir paciente no Supabase:', patientErr);
+        return { ok: false, error: describeDbError(patientErr, 'Não foi possível cadastrar o paciente') };
+      }
+
+      const { error: relErr } = await supabase
+        .from('psychologist_patient_relationships')
+        .upsert([{
+          psychologist_id: psychologistId,
+          patient_id: patient.id,
+          status: 'active',
+          started_at: new Date().toISOString()
+        }], { onConflict: 'psychologist_id,patient_id', ignoreDuplicates: true });
+
+      if (relErr) {
+        console.error('Erro ao vincular paciente ao psicólogo:', relErr);
+        return { ok: false, error: describeDbError(relErr, 'Paciente criado, mas o vínculo com você falhou') };
+      }
+
+      return { ok: true };
+    } catch (err: any) {
+      console.error('Erro de rede:', err);
+      return { ok: false, error: `Sem conexão com o servidor: ${err?.message || err}` };
+    }
+  },
+
+  async updatePatient(id: string, updates: Partial<Patient>): Promise<WriteResult> {
+    if (!isSupabaseConfigured || !supabase) return { ok: false, error: 'Supabase não configurado.' };
+    if (!isUuid(id)) {
+      return { ok: false, error: 'Este paciente ainda não foi gravado no banco. Cadastre-o novamente.' };
+    }
     try {
       const { error } = await supabase
         .from('patients')
         .update({
-          ...updates,
+          ...toPatientRow(updates),
           updated_at: new Date().toISOString()
         })
         .eq('id', id);
 
-      return !error;
-    } catch (err) {
+      if (error) {
+        console.error('Erro ao atualizar paciente:', error);
+        return { ok: false, error: describeDbError(error, 'Não foi possível salvar as alterações do paciente') };
+      }
+      return { ok: true };
+    } catch (err: any) {
       console.error('Erro ao atualizar paciente:', err);
-      return false;
+      return { ok: false, error: `Sem conexão com o servidor: ${err?.message || err}` };
+    }
+  },
+
+  // ==========================================
+  // GRUPOS DE PACIENTES
+  // ==========================================
+  /** Retorna null quando a consulta falha (ex.: migração 06 ainda não aplicada), para a tela manter o que já tem. */
+  async getPatientGroups(psychologistId: string): Promise<PatientGroup[] | null> {
+    if (!isSupabaseConfigured || !supabase || !isUuid(psychologistId)) return null;
+    try {
+      const { data, error } = await supabase
+        .from('patient_groups')
+        .select('*')
+        .eq('psychologist_id', psychologistId)
+        .order('name', { ascending: true });
+      if (error) {
+        console.warn('Erro ao buscar grupos de pacientes:', error.message);
+        return null;
+      }
+      return data || [];
+    } catch (err) {
+      console.warn('Erro de conexão:', err);
+      return null;
+    }
+  },
+
+  async insertPatientGroup(group: PatientGroup): Promise<WriteResult> {
+    if (!isSupabaseConfigured || !supabase) return { ok: false, error: 'Supabase não configurado.' };
+    if (!isUuid(group.psychologist_id)) {
+      return { ok: false, error: 'Sua conta de psicólogo ainda não está sincronizada com o banco. Saia e entre novamente.' };
+    }
+    try {
+      const { error } = await supabase
+        .from('patient_groups')
+        .upsert([{ id: group.id, psychologist_id: group.psychologist_id, name: group.name }], { onConflict: 'id' });
+      if (error) {
+        console.error('Erro ao gravar grupo:', error);
+        return { ok: false, error: describeDbError(error, 'Não foi possível criar o grupo') };
+      }
+      return { ok: true };
+    } catch (err: any) {
+      return { ok: false, error: `Sem conexão com o servidor: ${err?.message || err}` };
+    }
+  },
+
+  async updatePatientGroup(id: string, name: string): Promise<WriteResult> {
+    if (!isSupabaseConfigured || !supabase) return { ok: false, error: 'Supabase não configurado.' };
+    try {
+      const { error } = await supabase.from('patient_groups').update({ name }).eq('id', id);
+      if (error) return { ok: false, error: describeDbError(error, 'Não foi possível renomear o grupo') };
+      return { ok: true };
+    } catch (err: any) {
+      return { ok: false, error: `Sem conexão com o servidor: ${err?.message || err}` };
+    }
+  },
+
+  async deletePatientGroup(id: string): Promise<WriteResult> {
+    if (!isSupabaseConfigured || !supabase) return { ok: false, error: 'Supabase não configurado.' };
+    try {
+      const { error } = await supabase.from('patient_groups').delete().eq('id', id);
+      if (error) return { ok: false, error: describeDbError(error, 'Não foi possível excluir o grupo') };
+      return { ok: true };
+    } catch (err: any) {
+      return { ok: false, error: `Sem conexão com o servidor: ${err?.message || err}` };
     }
   },
 
@@ -272,8 +439,9 @@ export const SupabaseService = {
   // ==========================================
   // SESSÕES CLÍNICAS & NOTAS PRIVADAS (CFP)
   // ==========================================
-  async getSessions(psychologistId?: string, patientId?: string): Promise<TherapySession[]> {
-    if (!isSupabaseConfigured || !supabase) return [];
+  /** Retorna null quando a consulta falha (diferente de lista vazia). */
+  async getSessions(psychologistId?: string, patientId?: string): Promise<TherapySession[] | null> {
+    if (!isSupabaseConfigured || !supabase) return null;
     try {
       let query = supabase
         .from('therapy_sessions')
@@ -286,7 +454,7 @@ export const SupabaseService = {
       const { data, error } = await query;
       if (error) {
         console.warn('Erro ao buscar sessões:', error.message);
-        return [];
+        return null;
       }
 
       return (data || []).map((s: any) => ({
@@ -295,92 +463,183 @@ export const SupabaseService = {
       }));
     } catch (err) {
       console.warn('Erro de conexão:', err);
-      return [];
+      return null;
     }
   },
 
-  async insertSession(
-    session: Omit<TherapySession, 'id' | 'created_at' | 'updated_at'>,
-    privateNotes?: Omit<SessionPrivateNotes, 'id' | 'session_id' | 'psychologist_id' | 'patient_id' | 'created_at' | 'updated_at'>
-  ): Promise<TherapySession | null> {
-    if (!isSupabaseConfigured || !supabase) return null;
+  /**
+   * Grava a sessão (e as notas privadas) de forma idempotente: o id é gerado no cliente e a escrita é um
+   * upsert, então repetir a chamada após uma falha não duplica o registro.
+   */
+  async insertSession(session: TherapySession, privateNotes?: SessionPrivateNotes): Promise<WriteResult> {
+    if (!isSupabaseConfigured || !supabase) return { ok: false, error: 'Supabase não configurado.' };
+    if (!isUuid(session.psychologist_id)) {
+      return { ok: false, error: 'Sua conta de psicólogo ainda não está sincronizada com o banco. Saia e entre novamente.' };
+    }
+    if (!isUuid(session.patient_id)) {
+      return { ok: false, error: 'Este paciente ainda não foi gravado no banco (cadastro incompleto). Cadastre-o novamente antes de registrar a sessão.' };
+    }
     try {
-      const { private_notes, ...cleanSession } = session as any;
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('therapy_sessions')
-        .insert([cleanSession])
-        .select()
-        .single();
+        .upsert([toSessionRow(session)], { onConflict: 'id' });
 
       if (error) {
-        console.error('Erro ao salvar sessão no Supabase:', error.message);
-        return null;
+        console.error('Erro ao salvar sessão no Supabase:', error);
+        return { ok: false, error: describeDbError(error, 'Não foi possível gravar a sessão') };
       }
 
-      // Se houver notas privadas com sigilo absoluto (Resolução CFP)
-      if (data && privateNotes && (privateNotes.private_clinical_hypothesis || privateNotes.supervision_notes || privateNotes.risk_assessment_notes)) {
-        const { data: notesData } = await supabase
+      if (privateNotes && (privateNotes.private_clinical_hypothesis || privateNotes.supervision_notes || privateNotes.risk_assessment_notes || privateNotes.transference_countertransference_notes)) {
+        const { error: notesErr } = await supabase
           .from('session_private_notes')
-          .insert([{
-            session_id: data.id,
-            psychologist_id: data.psychologist_id,
-            patient_id: data.patient_id,
+          .upsert([{
+            id: privateNotes.id,
+            session_id: session.id,
+            psychologist_id: session.psychologist_id,
+            patient_id: session.patient_id,
             private_clinical_hypothesis: privateNotes.private_clinical_hypothesis || '',
             supervision_notes: privateNotes.supervision_notes || null,
             transference_countertransference_notes: privateNotes.transference_countertransference_notes || null,
             risk_assessment_notes: privateNotes.risk_assessment_notes || null,
-          }])
-          .select()
-          .single();
+          }], { onConflict: 'id' });
 
-        return {
-          ...data,
-          private_notes: notesData || undefined
-        };
+        if (notesErr) {
+          console.error('Erro ao salvar notas privadas:', notesErr);
+          return { ok: false, error: describeDbError(notesErr, 'A sessão foi gravada, mas as anotações privadas não') };
+        }
       }
 
-      return data;
-    } catch (err) {
+      return { ok: true };
+    } catch (err: any) {
       console.error('Erro de rede ao salvar sessão:', err);
-      return null;
+      return { ok: false, error: `Sem conexão com o servidor: ${err?.message || err}` };
     }
   },
 
   async updateSession(
     id: string,
     updates: Partial<TherapySession>,
-    privateNotesUpdates?: Partial<SessionPrivateNotes>
-  ): Promise<boolean> {
-    if (!isSupabaseConfigured || !supabase) return false;
+    privateNotesUpdates?: Partial<SessionPrivateNotes>,
+    ownerIds?: { psychologist_id: string; patient_id: string }
+  ): Promise<WriteResult> {
+    if (!isSupabaseConfigured || !supabase) return { ok: false, error: 'Supabase não configurado.' };
+    if (!isUuid(id)) {
+      return { ok: false, error: 'Esta sessão nunca foi gravada no banco e não pode ser editada. Registre-a novamente.' };
+    }
     try {
-      const { private_notes, ...cleanUpdates } = updates as any;
+      const { id: _ignoredId, ...rowUpdates } = toSessionRow(updates as any);
       const { error } = await supabase
         .from('therapy_sessions')
-        .update({
-          ...cleanUpdates,
-          updated_at: new Date().toISOString()
-        })
+        .update({ ...rowUpdates, updated_at: new Date().toISOString() })
         .eq('id', id);
 
       if (error) {
-        console.error('Erro ao atualizar sessão:', error.message);
-        return false;
+        console.error('Erro ao atualizar sessão:', error);
+        return { ok: false, error: describeDbError(error, 'Não foi possível atualizar a sessão') };
       }
 
       if (privateNotesUpdates) {
-        await supabase
+        const { data: existing, error: findErr } = await supabase
           .from('session_private_notes')
-          .update({
-            ...privateNotesUpdates,
-            updated_at: new Date().toISOString()
-          })
-          .eq('session_id', id);
+          .select('id')
+          .eq('session_id', id)
+          .maybeSingle();
+
+        if (findErr) {
+          return { ok: false, error: describeDbError(findErr, 'A sessão foi atualizada, mas as anotações privadas não') };
+        }
+
+        const notesPayload = {
+          private_clinical_hypothesis: privateNotesUpdates.private_clinical_hypothesis || '',
+          supervision_notes: privateNotesUpdates.supervision_notes || null,
+          transference_countertransference_notes: privateNotesUpdates.transference_countertransference_notes || null,
+          risk_assessment_notes: privateNotesUpdates.risk_assessment_notes || null,
+          updated_at: new Date().toISOString(),
+        };
+
+        const hasContent = Boolean(
+          notesPayload.private_clinical_hypothesis ||
+          notesPayload.supervision_notes ||
+          notesPayload.transference_countertransference_notes ||
+          notesPayload.risk_assessment_notes
+        );
+
+        let notesErr: { code?: string; message?: string } | null = null;
+        if (existing?.id) {
+          ({ error: notesErr } = await supabase.from('session_private_notes').update(notesPayload).eq('id', existing.id));
+        } else if (hasContent && ownerIds) {
+          // Antes, editar uma sessão sem notas privadas descartava as notas novas sem avisar.
+          ({ error: notesErr } = await supabase.from('session_private_notes').insert([{
+            session_id: id,
+            psychologist_id: ownerIds.psychologist_id,
+            patient_id: ownerIds.patient_id,
+            ...notesPayload,
+          }]));
+        }
+        if (notesErr) {
+          return { ok: false, error: describeDbError(notesErr, 'A sessão foi atualizada, mas as anotações privadas não') };
+        }
       }
 
-      return true;
-    } catch (err) {
+      return { ok: true };
+    } catch (err: any) {
       console.error('Erro de rede ao atualizar sessão:', err);
-      return false;
+      return { ok: false, error: `Sem conexão com o servidor: ${err?.message || err}` };
+    }
+  },
+
+  // ==========================================
+  // FEED DE AGENDA (iCal) — token secreto por psicólogo
+  // ==========================================
+  /** Devolve o token do feed do psicólogo logado. rotate = true gera um novo e invalida o link anterior. */
+  async getCalendarFeedToken(rotate = false): Promise<WriteResult<string>> {
+    if (!isSupabaseConfigured || !supabase) return { ok: false, error: 'Supabase não configurado.' };
+    try {
+      const { data, error } = await supabase.rpc('get_or_create_calendar_feed_token', { p_rotate: rotate });
+      if (error) {
+        console.error('Erro ao obter token do feed:', error);
+        if (error.code === 'PGRST202' || /Could not find the function/i.test(error.message)) {
+          return { ok: false, error: 'O banco ainda não tem a migração 05 (feed de agenda). Aplique-a no SQL Editor do Supabase.' };
+        }
+        return { ok: false, error: describeDbError(error, 'Não foi possível gerar o link da agenda') };
+      }
+      if (typeof data !== 'string' || data.length < 48) {
+        return { ok: false, error: 'Resposta inválida do servidor ao gerar o link da agenda.' };
+      }
+      return { ok: true, data };
+    } catch (err: any) {
+      return { ok: false, error: `Sem conexão com o servidor: ${err?.message || err}` };
+    }
+  },
+
+  // ==========================================
+  // AUDITORIA (visão do superadmin, sem conteúdo clínico)
+  // ==========================================
+  /** Eventos da trilha de auditoria. A visão só devolve linhas para superadmin e nunca traz o conteúdo dos registros. */
+  async getAdminAuditLog(options: { from?: number; pageSize?: number; table?: string } = {}): Promise<WriteResult<AdminAuditRow[]>> {
+    if (!isSupabaseConfigured || !supabase) return { ok: false, error: 'Supabase não configurado.' };
+    const from = options.from ?? 0;
+    const pageSize = options.pageSize ?? 50;
+    try {
+      let query = supabase
+        .from('clinical_audit_log_admin')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: false })
+        .range(from, from + pageSize - 1);
+      if (options.table) query = query.eq('table_name', options.table);
+
+      const { data, error } = await query;
+      if (error) {
+        console.error('Erro ao carregar a trilha de auditoria:', error);
+        if (error.code === 'PGRST205' || error.code === '42P01' || /clinical_audit_log_admin/i.test(error.message)) {
+          return { ok: false, error: 'A visão de auditoria ainda não existe no banco. Aplique a migração 05 no SQL Editor do Supabase.' };
+        }
+        return { ok: false, error: describeDbError(error, 'Não foi possível carregar a auditoria') };
+      }
+      return { ok: true, data: (data || []) as AdminAuditRow[] };
+    } catch (err: any) {
+      return { ok: false, error: `Sem conexão com o servidor: ${err?.message || err}` };
     }
   },
 

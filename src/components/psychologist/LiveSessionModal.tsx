@@ -29,6 +29,20 @@ import {
   ShieldCheck
 } from 'lucide-react';
 import { AIService } from '@/lib/ai/ai-service';
+import { loadDraft, saveDraft, clearDraft } from '@/lib/utils/draft';
+
+interface LiveDraft {
+  subjective: string;
+  objective: string;
+  assessment: string;
+  plan: string;
+  tasks: string[];
+  modality: SessionModality;
+  privateHypothesis: string;
+  supervisionNotes: string;
+  situation: string;
+  automaticThought: string;
+}
 
 interface LiveSessionModalProps {
   isOpen: boolean;
@@ -45,6 +59,7 @@ export const LiveSessionModal: React.FC<LiveSessionModalProps> = ({
 }) => {
   const {
     currentPsychologist,
+    sessions,
     addSession,
     addCognitiveDiagram,
     addVoiceAnchor,
@@ -136,15 +151,75 @@ export const LiveSessionModal: React.FC<LiveSessionModalProps> = ({
     return () => clearInterval(interval);
   }, [isTimerRunning, secondsLeft]);
 
-  // Resetar ao abrir
+  // Estado de gravação e rascunho local (protege contra fechar o modal, recarregar a página ou falha de rede)
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [draftNotice, setDraftNotice] = useState<string | null>(null);
+  const [draftReady, setDraftReady] = useState(false);
+  const draftKey = `psi_draft_live_${patient.id}`;
+
+  const resetClinicalFields = () => {
+    setSubjective('');
+    setObjective('');
+    setAssessment('');
+    setPlan('');
+    setTasks(['']);
+    setModality('online');
+    setPrivateHypothesis('');
+    setSupervisionNotes('');
+    setSituation('');
+    setAutomaticThought('');
+  };
+
+  // Ao abrir: reinicia o cronômetro e restaura o rascunho deste paciente (ou limpa os campos do paciente anterior)
   useEffect(() => {
-    if (isOpen) {
-      setSecondsLeft(50 * 60);
-      setIsTimerRunning(true);
-      hasAlerted40.current = false;
-      hasAlerted48.current = false;
+    if (!isOpen) {
+      setDraftReady(false);
+      return;
     }
-  }, [isOpen]);
+    setSecondsLeft(50 * 60);
+    setIsTimerRunning(true);
+    hasAlerted40.current = false;
+    hasAlerted48.current = false;
+    setSaveError(null);
+    setActiveTab('soap');
+
+    const draft = loadDraft<LiveDraft>(draftKey);
+    if (draft) {
+      const d = draft.data;
+      setSubjective(d.subjective || '');
+      setObjective(d.objective || '');
+      setAssessment(d.assessment || '');
+      setPlan(d.plan || '');
+      setTasks(d.tasks && d.tasks.length > 0 ? d.tasks : ['']);
+      setModality(d.modality || 'online');
+      setPrivateHypothesis(d.privateHypothesis || '');
+      setSupervisionNotes(d.supervisionNotes || '');
+      setSituation(d.situation || '');
+      setAutomaticThought(d.automaticThought || '');
+      setDraftNotice(`Rascunho recuperado (salvo em ${new Date(draft.savedAt).toLocaleString('pt-BR')}).`);
+    } else {
+      resetClinicalFields();
+      setDraftNotice(null);
+    }
+    setDraftReady(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, patient.id]);
+
+  // Autosave do rascunho a cada alteração
+  useEffect(() => {
+    if (!isOpen || !draftReady) return;
+    const hasContent = [subjective, objective, assessment, plan, privateHypothesis, supervisionNotes, situation, automaticThought]
+      .some(v => v.trim().length > 0) || tasks.some(t => t.trim().length > 0);
+    if (!hasContent) {
+      clearDraft(draftKey);
+      return;
+    }
+    saveDraft<LiveDraft>(draftKey, {
+      subjective, objective, assessment, plan, tasks, modality,
+      privateHypothesis, supervisionNotes, situation, automaticThought,
+    });
+  }, [isOpen, draftReady, draftKey, subjective, objective, assessment, plan, tasks, modality, privateHypothesis, supervisionNotes, situation, automaticThought]);
 
   const formatTime = (secs: number) => {
     const m = Math.floor(secs / 60);
@@ -215,17 +290,34 @@ export const LiveSessionModal: React.FC<LiveSessionModalProps> = ({
     }
   };
 
-  const handleFinishSession = () => {
+  const handleFinishSession = async () => {
+    if (isSaving) return;
+
+    if (![subjective, objective, assessment, plan].some(v => v.trim().length > 0)) {
+      setActiveTab('soap');
+      setSaveError('Preencha ao menos um campo do registro SOAP antes de finalizar a sessão.');
+      return;
+    }
+
     const elapsedMinutes = Math.max(1, Math.round((50 * 60 - secondsLeft) / 60));
     const validTasks = tasks.map(t => t.trim()).filter(t => t.length > 0);
     const combinedHomework = validTasks.length > 0 ? validTasks.join('\n• ') : 'Nenhuma tarefa prescrita.';
-    
-    // Salvar sessão oficial
-    addSession(
+    const previousNumbers = sessions
+      .filter(s => s.patient_id === patient.id)
+      .map(s => s.session_number || 0);
+    const nextSessionNumber = Math.max(0, ...previousNumbers) + 1;
+
+    setIsSaving(true);
+    setSaveError(null);
+
+    // Salvar sessão oficial: só encerra o modal depois que o banco confirmar a gravação
+    let result;
+    try {
+      result = await addSession(
       {
         psychologist_id: currentPsychologist.id,
         patient_id: patient.id,
-        session_number: 1,
+        session_number: nextSessionNumber,
         session_date: new Date().toISOString(),
         duration_minutes: elapsedMinutes,
         modality,
@@ -242,7 +334,22 @@ export const LiveSessionModal: React.FC<LiveSessionModalProps> = ({
         private_clinical_hypothesis: privateHypothesis,
         supervision_notes: supervisionNotes,
       } : undefined
-    );
+      );
+    } catch (err: any) {
+      result = { ok: false, error: `Erro inesperado ao gravar: ${err?.message || err}` };
+    }
+
+    setIsSaving(false);
+
+    if (!result.ok) {
+      // Nada é apagado: o texto continua na tela e no rascunho local para tentar de novo.
+      setSaveError(result.error || 'Não foi possível gravar a sessão. Seu texto foi mantido; tente novamente.');
+      return;
+    }
+
+    clearDraft(draftKey);
+    resetClinicalFields();
+    setDraftNotice(null);
 
     addNotification({
       recipient_role: 'psychologist',
@@ -765,17 +872,30 @@ export const LiveSessionModal: React.FC<LiveSessionModalProps> = ({
         </div>
 
         {/* Footer com Ações */}
+        {saveError && (
+          <div role="alert" className="mt-4 bg-rose-500/10 border border-rose-500/30 text-rose-800 dark:text-rose-300 px-4 py-3 rounded-xl flex items-start gap-2 text-sm">
+            <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+            <span><strong>A sessão NÃO foi gravada.</strong> {saveError} Seu texto está preservado; corrija e tente novamente.</span>
+          </div>
+        )}
+        {draftNotice && !saveError && (
+          <div className="mt-4 bg-sky-500/10 border border-sky-500/20 text-sky-800 dark:text-sky-300 px-4 py-2 rounded-xl flex items-center gap-2 text-xs">
+            <Save className="w-4 h-4 shrink-0" />
+            <span>{draftNotice} O texto é salvo automaticamente neste navegador enquanto você digita.</span>
+          </div>
+        )}
         <div className="flex items-center justify-between pt-4 mt-4 border-t border-slate-200 dark:border-slate-800">
           <Button variant="outline" onClick={onClose} size="sm">
-            Minimizar / Cancelar
+            Minimizar (mantém o rascunho)
           </Button>
 
           <Button
             onClick={handleFinishSession}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold flex items-center gap-2 shadow-lg shadow-emerald-600/20"
+            disabled={isSaving}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold flex items-center gap-2 shadow-lg shadow-emerald-600/20 disabled:opacity-60"
           >
             <CheckCircle2 className="w-4 h-4" />
-            Finalizar Sessão & Registrar no Prontuário
+            {isSaving ? 'Gravando no prontuário...' : 'Finalizar Sessão & Registrar no Prontuário'}
           </Button>
         </div>
       </div>

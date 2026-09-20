@@ -9,11 +9,11 @@ function runMedicalRecordExportTests() {
     id: 'pat_1',
     psychologist_id: 'psy_1',
     full_name: 'Mariana Costa',
+    email: 'mariana@example.com',
+    phone: '+5511999998888',
     birth_date: '1994-06-15',
     status: 'active',
     started_at: '2026-01-10',
-    created_at: '2026-01-10T10:00:00Z',
-    updated_at: '2026-01-10T10:00:00Z',
   };
 
   const mockSessions: TherapySession[] = [
