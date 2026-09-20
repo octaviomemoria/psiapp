@@ -161,6 +161,38 @@ async function run() {
   assert.deepStrictEqual(toPatientRow({}), {}, 'update parcial não toca em colunas ausentes');
   console.log('✅ PASS: toPatientRow em atualização parcial');
 
+  // --- agendamento: patient_name (só de tela) derrubava toda gravação em produção ---
+  reset();
+  const apptId = newUuid();
+  r = await SupabaseService.insertAppointment({
+    id: apptId, psychologist_id: PSY, patient_id: PAT, patient_name: 'Lara', starts_at: '2026-09-21T12:00:00Z',
+    ends_at: '2026-09-21T12:50:00Z', modality: 'online', status: 'scheduled', room_id: null,
+  });
+  assert.strictEqual(r.ok, true);
+  assert.strictEqual(calls[0].table, 'appointments');
+  assert.ok(!('patient_name' in calls[0].rows[0]), 'patient_name não existe na tabela appointments');
+  assert.strictEqual(calls[0].rows[0].id, apptId);
+  assert.strictEqual(calls[0].rows[0].room_id, null);
+  console.log('✅ PASS: agendamento grava só colunas reais (sem patient_name)');
+
+  reset();
+  r = await SupabaseService.insertAppointment({
+    id: 'apt-123', psychologist_id: PSY, patient_id: PAT, starts_at: 'x', ends_at: 'y', modality: 'online', status: 'scheduled',
+  });
+  assert.strictEqual(r.ok, false);
+  assert.strictEqual(calls.length, 0, 'id temporário não-UUID não vai ao banco');
+  console.log('✅ PASS: agendamento com id inválido é recusado sem tocar no banco');
+
+  reset();
+  const series = [1, 2, 3].map(() => ({
+    id: newUuid(), psychologist_id: PSY, patient_id: PAT, starts_at: 'a', ends_at: 'b', modality: 'online' as const, status: 'scheduled' as const, series_id: apptId, recurrence_rule: 'weekly' as const,
+  }));
+  r = await SupabaseService.insertAppointments(series);
+  assert.strictEqual(r.ok, true);
+  assert.strictEqual(calls.length, 1, 'série inteira em uma única gravação');
+  assert.strictEqual(calls[0].rows.length, 3);
+  console.log('✅ PASS: série recorrente é gravada de uma vez');
+
   console.log('🎉 Todos os testes de persistência clínica passaram!');
 }
 

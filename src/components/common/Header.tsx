@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { usePsi } from '@/lib/store/psi-context';
 import {
   Sparkles,
@@ -32,7 +32,7 @@ import { NotificationDropdown } from './NotificationDropdown';
 import { AuthModal } from '@/components/auth/AuthModal';
 import { BiometricLockModal } from './BiometricLockModal';
 import { TherapeuticContractModal } from './TherapeuticContractModal';
-import { PublicBookingPage } from '@/components/public/PublicBookingPage';
+import { BookingSettingsModal } from '@/components/psychologist/BookingSettingsModal';
 import { PushNotificationManager } from './PushNotificationManager';
 import { TwoFactorSetupModal } from '@/components/auth/TwoFactorSetupModal';
 import { SaaSSubscriptionModal } from './SaaSSubscriptionModal';
@@ -64,6 +64,17 @@ export const Header: React.FC = () => {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isBrandingOpen, setIsBrandingOpen] = useState(false);
   const [isAccountSecurityOpen, setIsAccountSecurityOpen] = useState(false);
+
+  // O middleware redireciona para /?auth=required quando alguém tenta abrir uma área sem sessão/papel adequado
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('auth') === 'required') {
+      setIsAuthModalOpen(true);
+      params.delete('auth');
+      const query = params.toString();
+      window.history.replaceState(null, '', window.location.pathname + (query ? `?${query}` : ''));
+    }
+  }, []);
 
   return (
     <header className="sticky top-0 z-40 w-full glass-header border-b border-slate-200/70 shadow-sm">
@@ -234,16 +245,18 @@ export const Header: React.FC = () => {
             )}
 
             {/* Ações Auxiliares */}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setIsBookingOpen(true)}
-              className="hidden sm:flex items-center text-xs text-teal-700 border-teal-200 hover:bg-teal-50"
-              title="Página Pública de Agendamento Online"
-            >
-              <Globe className="w-3.5 h-3.5 mr-1 text-teal-600" />
-              Bio Link
-            </Button>
+            {currentRole === 'psychologist' && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsBookingOpen(true)}
+                className="hidden sm:flex items-center text-xs text-teal-700 border-teal-200 hover:bg-teal-50"
+                title="Link público de agendamento online"
+              >
+                <Globe className="w-3.5 h-3.5 mr-1 text-teal-600" />
+                Bio Link
+              </Button>
+            )}
 
             <Button
               variant="outline"
@@ -386,8 +399,8 @@ export const Header: React.FC = () => {
         psychologistName={currentPsychologist.profile?.full_name ? `${currentPsychologist.profile.full_name} (CRP ${currentPsychologist.crp_number}/${currentPsychologist.crp_state})` : 'Psicólogo(a)'}
       />
 
-      {/* Página Pública de Agendamento (Bio Link) */}
-      <PublicBookingPage
+      {/* Link público de agendamento online (configuração e cópia do link) */}
+      <BookingSettingsModal
         isOpen={isBookingOpen}
         onClose={() => setIsBookingOpen(false)}
       />

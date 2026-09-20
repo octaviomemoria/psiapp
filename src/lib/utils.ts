@@ -8,7 +8,12 @@ export function cn(...inputs: ClassValue[]) {
 export function formatDate(dateString?: string | null): string {
   if (!dateString) return "-";
   try {
-    const d = new Date(dateString);
+    // "YYYY-MM-DD" (sem horário) é um dia de calendário, não um instante: new Date() o leria como UTC
+    // e, no fuso do Brasil, mostraria o dia anterior (ex.: nascimento 15/05 aparecia como 14/05).
+    const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateString);
+    const d = dateOnly
+      ? new Date(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3]))
+      : new Date(dateString);
     if (isNaN(d.getTime())) return dateString;
     return d.toLocaleDateString("pt-BR", {
       day: "2-digit",

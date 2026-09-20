@@ -1,6 +1,7 @@
 import { onlyDigits, formatCPF, isValidCPF, formatPhone, isValidPhone, formatCEP, calculateAge } from './masks';
 import { lookupCep } from './viacep';
 import { getBillingResponsible } from './patient';
+import { formatDate } from '../utils';
 
 async function run() {
   const failures: string[] = [];
@@ -54,6 +55,14 @@ async function run() {
   const broken = (async () => { throw new Error('offline'); }) as unknown as typeof fetch;
   check((await lookupCep('01310100', broken)) === null, 'lookupCep retorna null sem rede');
   check((await lookupCep('123', fake)) === null, 'lookupCep rejeita CEP incompleto sem consultar');
+
+  // formatDate: dia de calendário não pode recuar um dia em fuso negativo (America/Sao_Paulo é UTC-3)
+  const previousTz = process.env.TZ;
+  process.env.TZ = 'America/Sao_Paulo';
+  check(formatDate('2015-05-15') === '15/05/2015', 'formatDate não recua o dia de uma data sem horário');
+  check(formatDate('') === '-', 'formatDate vazio');
+  check(formatDate('não é data') === 'não é data', 'formatDate devolve o texto quando inválida');
+  process.env.TZ = previousTz;
 
   // Responsável financeiro: responsável autorizado > paciente
   const adult = { full_name: 'Lara Souza', cpf: '52998224725' };

@@ -6,6 +6,9 @@ import {
   Psychologist,
   Patient,
   PatientGroup,
+  BookingSettings,
+  BookingRequest,
+  RecurrenceRule,
   Appointment,
   TherapySession,
   SessionPrivateNotes,
@@ -68,6 +71,7 @@ import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
 import { SupabaseService, WriteResult } from '@/lib/supabase/service';
 import { newUuid } from '@/lib/utils';
 import { getBillingResponsible } from '@/lib/utils/patient';
+import { expandRecurrence, findConflicts } from '@/lib/calendar/schedule-utils';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 
 interface PsiContextType {
@@ -141,7 +145,9 @@ interface PsiContextType {
   addSession: (session: Omit<TherapySession, 'id' | 'created_at'>, privateNotes?: Omit<SessionPrivateNotes, 'id' | 'session_id' | 'psychologist_id' | 'patient_id' | 'created_at' | 'updated_at'>) => Promise<WriteResult>;
   updateSession: (id: string, updates: Partial<TherapySession>, privateNotesUpdates?: Partial<SessionPrivateNotes>) => Promise<WriteResult>;
   deleteSession: (id: string) => void;
-  addAppointment: (appointment: Omit<Appointment, 'id'>) => void;
+  addAppointment: (appointment: Omit<Appointment, 'id'>) => Promise<WriteResult<Appointment>>;
+  addAppointmentSeries: (appointment: Omit<Appointment, 'id'>, rule: RecurrenceRule, count: number) => Promise<WriteResult<Appointment[]>>;
+  updateAppointment: (id: string, updates: Partial<Appointment>) => Promise<WriteResult>;
   updateAppointmentStatus: (id: string, status: AppointmentStatus, cancellationReason?: string) => void;
   updateAppointmentPayment: (id: string, paymentStatus: PaymentStatus, price?: number, receiptNumber?: string) => void;
   deleteAppointment: (id: string) => void;
@@ -165,6 +171,16 @@ interface PsiContextType {
   updateClinicPsychologist: (id: string, updates: Partial<ClinicPsychologist>) => void;
   reassignPatientPsychologist: (patientId: string, newPsychologistId: string, newPsychologistName: string) => void;
   updateRoomStatus: (roomId: string, status: 'available' | 'occupied' | 'maintenance', sessionInfo?: any) => void;
+  addRoom: (room: Omit<ClinicRoom, 'id'>) => Promise<WriteResult<ClinicRoom>>;
+  updateRoom: (id: string, updates: Partial<ClinicRoom>) => Promise<WriteResult>;
+  deleteRoom: (id: string) => Promise<WriteResult>;
+
+  // Agendamento online
+  bookingSettings: BookingSettings | null;
+  bookingRequests: BookingRequest[];
+  saveBookingSettings: (settings: BookingSettings) => Promise<WriteResult>;
+  approveBookingRequest: (id: string, options?: { room_id?: string | null }) => Promise<WriteResult<Appointment>>;
+  declineBookingRequest: (id: string, reason?: string) => Promise<WriteResult>;
 
   // Ações do SuperAdmin (Dono do SaaS)
   updateTenantStatus: (tenantId: string, status: 'active' | 'trial' | 'past_due' | 'suspended') => void;
@@ -235,6 +251,8 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [cognitiveDiagrams, setCognitiveDiagrams] = useState<CognitiveDiagram[]>(INITIAL_COGNITIVE_DIAGRAMS);
   const [voiceAnchors, setVoiceAnchors] = useState<VoiceAnchor[]>(INITIAL_VOICE_ANCHORS);
   const [patientInvites, setPatientInvites] = useState<PatientInvite[]>(INITIAL_INVITES);
+  const [bookingSettings, setBookingSettings] = useState<BookingSettings | null>(null);
+  const [bookingRequests, setBookingRequests] = useState<BookingRequest[]>([]);
 
   // Estados do Módulo Financeiro, Livro Caixa & Pacotes
   const [financialCategories, setFinancialCategories] = useState<FinancialCategory[]>(INITIAL_FINANCIAL_CATEGORIES);
@@ -269,6 +287,8 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setCurrentPsychologist(INITIAL_PSYCHOLOGIST);
     setPatients(INITIAL_PATIENTS);
     setPatientGroups([]);
+    setBookingSettings(null);
+    setBookingRequests([]);
     setAppointments(INITIAL_APPOINTMENTS);
     setSessions(INITIAL_SESSIONS);
     setGoals(INITIAL_GOALS);
@@ -335,7 +355,10 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             liveCategories,
             liveTransactions,
             livePackages,
-            liveGroups
+            liveGroups,
+            liveRooms,
+            liveBookingSettings,
+            liveBookingRequests
           ] = await Promise.all([
             SupabaseService.getPatients(psychologist.id),
             SupabaseService.getAppointments(psychologist.id),
@@ -353,7 +376,15 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             SupabaseService.getFinancialTransactions(psychologist.id),
             SupabaseService.getPatientPackages(psychologist.id),
             SupabaseService.getPatientGroups(psychologist.id),
+            SupabaseService.getRooms(psychologist.id),
+            SupabaseService.getBookingSettings(psychologist.id),
+            SupabaseService.getBookingRequests(psychologist.id),
           ]);
+
+          // null = consulta falhou (ex.: migração 07 pendente): mantém o que já está na tela.
+          if (liveRooms) setClinicRooms(liveRooms);
+          if (liveBookingRequests) setBookingRequests(liveBookingRequests);
+          setBookingSettings(liveBookingSettings);
 
           // null = consulta falhou (ex.: migração 06 pendente): não apaga os grupos já carregados.
           if (liveGroups) setPatientGroups(liveGroups);
@@ -444,6 +475,8 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setActiveDataSource('supabase_live');
     setPatients([]);
     setPatientGroups([]);
+    setBookingSettings(null);
+    setBookingRequests([]);
     setAppointments([]);
     setSessions([]);
     setGoals([]);
@@ -522,6 +555,9 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, () => {
         loadLiveDataFromSupabase();
       })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'booking_requests' }, () => {
+        loadLiveDataFromSupabase();
+      })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'financial_transactions' }, () => {
         loadLiveDataFromSupabase();
       })
@@ -555,6 +591,8 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const parsed = JSON.parse(saved);
           if (parsed.patients) setPatients(parsed.patients);
           if (parsed.patientGroups) setPatientGroups(parsed.patientGroups);
+          if (parsed.bookingSettings) setBookingSettings(parsed.bookingSettings);
+          if (parsed.bookingRequests) setBookingRequests(parsed.bookingRequests);
           if (parsed.appointments) setAppointments(parsed.appointments);
           if (parsed.sessions) setSessions(parsed.sessions);
           if (parsed.goals) setGoals(parsed.goals);
@@ -594,6 +632,8 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const stateToSave = {
         patients,
         patientGroups,
+        bookingSettings,
+        bookingRequests,
         appointments,
         sessions,
         goals,
@@ -627,6 +667,8 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [
     patients,
     patientGroups,
+    bookingSettings,
+    bookingRequests,
     appointments,
     sessions,
     goals,
@@ -960,36 +1002,86 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [isLiveProduction]);
 
-  const addAppointment = useCallback((appointmentData: Omit<Appointment, 'id'>) => {
-    const tempAptId = `apt-${Date.now()}`;
-    const newAppointment: Appointment = {
-      ...appointmentData,
-      id: tempAptId,
-      price: appointmentData.price || 220,
-      payment_status: appointmentData.payment_status || 'pending',
-    };
-    setAppointments(prev => [...prev, newAppointment]);
+  const appointmentsRef = useRef<Appointment[]>(appointments);
+  appointmentsRef.current = appointments;
 
-    if (isSupabaseConfigured && isLiveProduction) {
-      SupabaseService.insertAppointment({
-        ...appointmentData,
-        price: appointmentData.price || 220,
-        payment_status: appointmentData.payment_status || 'pending',
-      }).then(realApt => {
-        if (realApt && realApt.id) {
-          setAppointments(prev => prev.map(a => a.id === tempAptId ? realApt : a));
-        }
-      });
+  /** Falhas de gravação aparecem como notificação, para o usuário não achar que algo foi salvo. */
+  const pushErrorNotification = useCallback((title: string, message: string) => {
+    setNotifications(prev => [{
+      id: `notif-${Date.now()}-err`,
+      recipient_role: 'psychologist',
+      title,
+      message,
+      type: 'feedback_received',
+      read: false,
+      created_at: new Date().toISOString()
+    }, ...prev]);
+  }, []);
+
+  const buildAppointment = (data: Omit<Appointment, 'id'>, overrides: Partial<Appointment> = {}): Appointment => ({
+    ...data,
+    id: newUuid(),
+    price: data.price || currentPsychologist.session_default_price || 220,
+    payment_status: data.payment_status || 'pending',
+    ...overrides,
+  });
+
+  const addAppointment = useCallback(async (appointmentData: Omit<Appointment, 'id'>): Promise<WriteResult<Appointment>> => {
+    const newAppointment = buildAppointment(appointmentData);
+    setAppointments(prev => [...prev, newAppointment]);
+    if (!(isSupabaseConfigured && isLiveProduction)) return { ok: true, data: newAppointment };
+
+    const result = await SupabaseService.insertAppointment(newAppointment);
+    if (!result.ok) {
+      setAppointments(prev => prev.filter(a => a.id !== newAppointment.id));
+      pushErrorNotification('Agendamento NÃO foi salvo', result.error || 'Falha ao gravar no banco. Tente novamente.');
+      return { ok: false, error: result.error };
     }
-  }, [isLiveProduction]);
+    return { ok: true, data: newAppointment };
+  }, [isLiveProduction, currentPsychologist, pushErrorNotification]);
+
+  /** Cria a série inteira de uma vez (mesmo series_id): ou todas as ocorrências são gravadas ou nenhuma. */
+  const addAppointmentSeries = useCallback(async (
+    appointmentData: Omit<Appointment, 'id'>,
+    rule: RecurrenceRule,
+    count: number
+  ): Promise<WriteResult<Appointment[]>> => {
+    const seriesId = newUuid();
+    const created = expandRecurrence(appointmentData.starts_at, appointmentData.ends_at, rule, count).map(occurrence =>
+      buildAppointment(appointmentData, { ...occurrence, series_id: seriesId, recurrence_rule: rule })
+    );
+    setAppointments(prev => [...prev, ...created]);
+    if (!(isSupabaseConfigured && isLiveProduction)) return { ok: true, data: created };
+
+    const result = await SupabaseService.insertAppointments(created);
+    if (!result.ok) {
+      const ids = new Set(created.map(a => a.id));
+      setAppointments(prev => prev.filter(a => !ids.has(a.id)));
+      pushErrorNotification('Série de agendamentos NÃO foi salva', result.error || 'Falha ao gravar no banco. Tente novamente.');
+      return { ok: false, error: result.error };
+    }
+    return { ok: true, data: created };
+  }, [isLiveProduction, currentPsychologist, pushErrorNotification]);
+
+  /** Edição e remarcação. Se o banco recusar, a tela volta ao valor anterior. */
+  const updateAppointment = useCallback(async (id: string, updates: Partial<Appointment>): Promise<WriteResult> => {
+    const previous = appointmentsRef.current.find(a => a.id === id);
+    setAppointments(prev => prev.map(a => a.id === id ? { ...a, ...updates } : a));
+    if (!(isSupabaseConfigured && isLiveProduction)) return { ok: true };
+
+    const result = await SupabaseService.updateAppointment(id, updates);
+    if (!result.ok && previous) {
+      const restored: Record<string, any> = {};
+      for (const key of Object.keys(updates)) restored[key] = (previous as any)[key];
+      setAppointments(prev => prev.map(a => a.id === id ? { ...a, ...restored } : a));
+      pushErrorNotification('Alteração do agendamento NÃO foi salva', result.error || 'Falha ao gravar no banco. Tente novamente.');
+    }
+    return result;
+  }, [isLiveProduction, pushErrorNotification]);
 
   const updateAppointmentStatus = useCallback((id: string, status: AppointmentStatus, cancellationReason?: string) => {
-    setAppointments(prev => prev.map(a => a.id === id ? { ...a, status, cancellation_reason: cancellationReason } : a));
-
-    if (isSupabaseConfigured && isLiveProduction) {
-      SupabaseService.updateAppointment(id, { status, cancellation_reason: cancellationReason });
-    }
-  }, [isLiveProduction]);
+    updateAppointment(id, { status, cancellation_reason: cancellationReason });
+  }, [updateAppointment]);
 
   const updateAppointmentPayment = useCallback((id: string, paymentStatus: PaymentStatus, price?: number, receiptNumber?: string) => {
     const generatedReceipt = receiptNumber || `REC-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`;
@@ -1488,9 +1580,146 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   }, [addNotification]);
 
+  // Salas: do psicólogo logado ficam no banco; no painel do gerente (sem conta de psicólogo) ficam só na tela.
+  const shouldPersistRooms = isSupabaseConfigured && isLiveProduction && currentRole === 'psychologist';
+
+  const addRoom = useCallback(async (roomData: Omit<ClinicRoom, 'id'>): Promise<WriteResult<ClinicRoom>> => {
+    const room: ClinicRoom = { ...roomData, id: newUuid(), status: roomData.status || 'available' };
+    setClinicRooms(prev => [...prev, room].sort((a, b) => a.name.localeCompare(b.name)));
+    if (shouldPersistRooms) {
+      const result = await SupabaseService.upsertRoom(room, currentPsychologist.id);
+      if (!result.ok) {
+        setClinicRooms(prev => prev.filter(r => r.id !== room.id));
+        return { ok: false, error: result.error };
+      }
+    }
+    return { ok: true, data: room };
+  }, [shouldPersistRooms, currentPsychologist.id]);
+
+  const updateRoom = useCallback(async (id: string, updates: Partial<ClinicRoom>): Promise<WriteResult> => {
+    const previous = clinicRooms.find(r => r.id === id);
+    if (!previous) return { ok: false, error: 'Sala não encontrada.' };
+    const next = { ...previous, ...updates };
+    setClinicRooms(prev => prev.map(r => r.id === id ? next : r).sort((a, b) => a.name.localeCompare(b.name)));
+    if (shouldPersistRooms) {
+      const result = await SupabaseService.upsertRoom(next, currentPsychologist.id);
+      if (!result.ok) {
+        setClinicRooms(prev => prev.map(r => r.id === id ? previous : r));
+        return result;
+      }
+    }
+    return { ok: true };
+  }, [clinicRooms, shouldPersistRooms, currentPsychologist.id]);
+
+  const deleteRoom = useCallback(async (id: string): Promise<WriteResult> => {
+    const previous = clinicRooms.find(r => r.id === id);
+    if (!previous) return { ok: true };
+    setClinicRooms(prev => prev.filter(r => r.id !== id));
+    // O banco faz ON DELETE SET NULL nos agendamentos; a tela acompanha.
+    setAppointments(prev => prev.map(a => a.room_id === id ? { ...a, room_id: null } : a));
+    if (shouldPersistRooms) {
+      const result = await SupabaseService.deleteRoom(id);
+      if (!result.ok) {
+        setClinicRooms(prev => [...prev, previous].sort((a, b) => a.name.localeCompare(b.name)));
+        return result;
+      }
+    }
+    return { ok: true };
+  }, [clinicRooms, shouldPersistRooms]);
+
   const updateRoomStatus = useCallback((roomId: string, status: 'available' | 'occupied' | 'maintenance', sessionInfo?: any) => {
     setClinicRooms(prev => prev.map(r => r.id === roomId ? { ...r, status, current_session_info: sessionInfo } : r));
-  }, []);
+    if (shouldPersistRooms) {
+      const room = clinicRooms.find(r => r.id === roomId);
+      if (room) SupabaseService.upsertRoom({ ...room, status }, currentPsychologist.id);
+    }
+  }, [clinicRooms, shouldPersistRooms, currentPsychologist.id]);
+
+  // Agendamento online: configuração do link público e solicitações recebidas
+  const saveBookingSettings = useCallback(async (settings: BookingSettings): Promise<WriteResult> => {
+    const previous = bookingSettings;
+    setBookingSettings(settings);
+    if (isSupabaseConfigured && isLiveProduction) {
+      const result = await SupabaseService.saveBookingSettings(settings);
+      if (!result.ok) {
+        setBookingSettings(previous);
+        return result;
+      }
+    }
+    return { ok: true };
+  }, [bookingSettings, isLiveProduction]);
+
+  const decideBookingRequest = useCallback(async (id: string, updates: Partial<BookingRequest>): Promise<WriteResult> => {
+    const previous = bookingRequests.find(r => r.id === id);
+    if (!previous) return { ok: false, error: 'Solicitação não encontrada.' };
+    const decidedAt = new Date().toISOString();
+    setBookingRequests(prev => prev.map(r => r.id === id ? { ...r, ...updates, decided_at: decidedAt } : r));
+    if (isSupabaseConfigured && isLiveProduction) {
+      const result = await SupabaseService.updateBookingRequest(id, { ...updates, decided_at: decidedAt });
+      if (!result.ok) {
+        setBookingRequests(prev => prev.map(r => r.id === id ? previous : r));
+        return result;
+      }
+    }
+    return { ok: true };
+  }, [bookingRequests, isLiveProduction]);
+
+  const declineBookingRequest = useCallback(async (id: string, reason?: string): Promise<WriteResult> => {
+    return decideBookingRequest(id, { status: 'declined', decline_reason: reason?.trim() || null });
+  }, [decideBookingRequest]);
+
+  /**
+   * Aprova: reconfere o horário, reaproveita o paciente de mesmo e-mail (ou cadastra um novo), cria o agendamento
+   * e só então marca a solicitação como aprovada.
+   */
+  const approveBookingRequest = useCallback(async (id: string, options: { room_id?: string | null } = {}): Promise<WriteResult<Appointment>> => {
+    const request = bookingRequests.find(r => r.id === id);
+    if (!request) return { ok: false, error: 'Solicitação não encontrada.' };
+    if (request.status !== 'pending') return { ok: false, error: 'Esta solicitação já foi respondida.' };
+
+    const conflicts = findConflicts(appointmentsRef.current, {
+      starts_at: request.requested_start,
+      ends_at: request.requested_end,
+      psychologist_id: currentPsychologist.id,
+      room_id: options.room_id,
+    });
+    if (conflicts.length > 0) {
+      return { ok: false, error: 'Este horário já está ocupado na sua agenda. Recuse a solicitação ou libere o horário antes de aprovar.' };
+    }
+
+    const email = request.email.trim().toLowerCase();
+    let patient = patientsRef.current.find(p => (p.email || '').trim().toLowerCase() === email);
+    if (!patient) {
+      patient = addPatient({
+        full_name: request.patient_name,
+        email: request.email,
+        phone: request.phone || '',
+        mobile: request.phone || '',
+        birth_date: '',
+        status: 'active',
+        how_found_us: 'Site ou plataforma de agendamento',
+        clinical_notes_overview: request.message || undefined,
+      });
+    }
+
+    const created = await addAppointment({
+      psychologist_id: currentPsychologist.id,
+      patient_id: patient.id,
+      patient_name: patient.full_name,
+      starts_at: request.requested_start,
+      ends_at: request.requested_end,
+      modality: request.modality,
+      location_or_link: undefined,
+      room_id: options.room_id ?? null,
+      status: 'confirmed',
+      notes: request.message ? `Solicitação online: ${request.message}` : 'Solicitado pela página de agendamento online.',
+    });
+    if (!created.ok || !created.data) return { ok: false, error: created.error };
+
+    const decided = await decideBookingRequest(id, { status: 'approved', appointment_id: created.data.id });
+    if (!decided.ok) return { ok: false, error: decided.error };
+    return { ok: true, data: created.data };
+  }, [bookingRequests, currentPsychologist.id, addAppointment, addPatient, decideBookingRequest]);
 
   // Ações do SuperAdmin (Dono do SaaS)
   const updateTenantStatus = useCallback((tenantId: string, status: 'active' | 'trial' | 'past_due' | 'suspended') => {
@@ -1769,6 +1998,8 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateSession,
         deleteSession,
         addAppointment,
+        addAppointmentSeries,
+        updateAppointment,
         updateAppointmentStatus,
         updateAppointmentPayment,
         deleteAppointment,
@@ -1788,6 +2019,14 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateClinicPsychologist,
         reassignPatientPsychologist,
         updateRoomStatus,
+        addRoom,
+        updateRoom,
+        deleteRoom,
+        bookingSettings,
+        bookingRequests,
+        saveBookingSettings,
+        approveBookingRequest,
+        declineBookingRequest,
         updateTenantStatus,
         updateTenantPlan,
         addTenant,

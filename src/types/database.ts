@@ -4,6 +4,8 @@ export type SessionModality = 'presencial' | 'online' | 'domiciliar';
 
 export type AppointmentStatus = 'scheduled' | 'confirmed' | 'completed' | 'canceled' | 'no_show' | 'rescheduled';
 
+export type RecurrenceRule = 'weekly' | 'biweekly' | 'monthly';
+
 export type PaymentStatus = 'pending' | 'paid_pix' | 'paid_card' | 'insurance' | 'free';
 
 export type GoalStatus = 'not_started' | 'in_progress' | 'evolving' | 'completed' | 'paused';
@@ -182,6 +184,10 @@ export interface Appointment {
   payment_status?: PaymentStatus;
   receipt_number?: string;
   paid_at?: string;
+  room_id?: string | null;
+  /** Agendamentos gerados juntos (recorrência) compartilham o mesmo series_id. */
+  series_id?: string | null;
+  recurrence_rule?: RecurrenceRule | null;
 }
 
 export interface TherapySession {
@@ -426,6 +432,8 @@ export interface ClinicPsychologist {
 
 export interface ClinicRoom {
   id: string;
+  /** Sala de um psicólogo autônomo (migração 07). */
+  psychologist_id?: string;
   clinic_id: string;
   name: string;
   room_number?: string;
@@ -583,3 +591,42 @@ export interface ConsentRecord {
   hash?: string;
 }
 
+
+// =============================================================================
+// AGENDAMENTO ONLINE (migração 07)
+// =============================================================================
+
+/** Chave = dia da semana (0 = domingo). Cada dia tem janelas "HH:MM". */
+export type WeeklyHours = Record<string, { start: string; end: string }[]>;
+
+export interface BookingSettings {
+  psychologist_id: string;
+  slug: string;
+  enabled: boolean;
+  slot_minutes: number;
+  min_notice_hours: number;
+  max_days_ahead: number;
+  weekly_hours: WeeklyHours;
+  modalities: SessionModality[];
+  welcome_message?: string | null;
+  timezone: string;
+}
+
+export type BookingRequestStatus = 'pending' | 'approved' | 'declined' | 'canceled';
+
+export interface BookingRequest {
+  id: string;
+  psychologist_id: string;
+  patient_name: string;
+  email: string;
+  phone?: string | null;
+  requested_start: string;
+  requested_end: string;
+  modality: SessionModality;
+  message?: string | null;
+  status: BookingRequestStatus;
+  appointment_id?: string | null;
+  decline_reason?: string | null;
+  decided_at?: string | null;
+  created_at: string;
+}

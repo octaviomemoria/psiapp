@@ -5,6 +5,9 @@ import {
   Patient,
   PatientGroup,
   Appointment,
+  ClinicRoom,
+  BookingSettings,
+  BookingRequest,
   TherapySession,
   SessionPrivateNotes,
   Goal,
@@ -109,6 +112,24 @@ export function toPatientRow(patient: Record<string, any>): Record<string, any> 
   return row;
 }
 
+const APPOINTMENT_COLUMNS = [
+  'id', 'psychologist_id', 'patient_id', 'starts_at', 'ends_at', 'modality', 'location_or_link', 'status',
+  'cancellation_reason', 'notes', 'price', 'payment_status', 'receipt_number', 'paid_at',
+  'room_id', 'series_id', 'recurrence_rule',
+] as const;
+
+/**
+ * Mantém somente colunas que existem em `appointments`. `patient_name` é só de tela: enviá-lo fazia o banco
+ * recusar TODO agendamento criado em produção.
+ */
+export function toAppointmentRow(appointment: Record<string, any>): Record<string, any> {
+  const row: Record<string, any> = {};
+  for (const col of APPOINTMENT_COLUMNS) {
+    if (appointment[col] !== undefined) row[col] = appointment[col];
+  }
+  return row;
+}
+
 export const SupabaseService = {
   // ==========================================
   // AUTENTICAÇÃO E PERFIL DO USUÁRIO
@@ -158,7 +179,10 @@ export const SupabaseService = {
     try {
       let profile = await this.getCurrentUserProfile(user.id);
       const displayName = metadata?.full_name || user.user_metadata?.full_name || user.email?.split('@')[0] || 'Psicólogo(a)';
-      const role = metadata?.role || user.user_metadata?.role || 'psychologist';
+      // user_metadata é definido pelo próprio usuário no cadastro: nunca conceder papel administrativo a partir dele.
+      // manager/superadmin/admin só existem se já constarem em `profiles` (concedidos por um administrador no banco).
+      const requestedRole = metadata?.role || user.user_metadata?.role;
+      const role: 'psychologist' | 'patient' = requestedRole === 'patient' ? 'patient' : 'psychologist';
       const crp = metadata?.crp_number || user.user_metadata?.crp_number || '';
       const crpState = metadata?.crp_state || user.user_metadata?.crp_state || 'SP';
 
@@ -680,41 +704,48 @@ export const SupabaseService = {
     }
   },
 
-  async insertAppointment(appointment: Omit<Appointment, 'id' | 'created_at' | 'updated_at'>): Promise<Appointment | null> {
-    if (!isSupabaseConfigured || !supabase) return null;
-    try {
-      const { data, error } = await supabase
-        .from('appointments')
-        .insert([appointment])
-        .select()
-        .single();
-
-      if (error) {
-        console.error('Erro ao salvar agendamento:', error.message);
-        return null;
-      }
-      return data;
-    } catch (err) {
-      console.error('Erro de rede:', err);
-      return null;
-    }
+  /** Grava um agendamento com id definido no cliente (idempotente). Não usa RETURNING, como em insertPatient. */
+  async insertAppointment(appointment: Appointment): Promise<WriteResult> {
+    return this.insertAppointments([appointment]);
   },
 
-  async updateAppointment(id: string, updates: Partial<Appointment>): Promise<boolean> {
-    if (!isSupabaseConfigured || !supabase) return false;
+  /** Grava vários agendamentos de uma vez (séries recorrentes): ou entram todos ou nenhum. */
+  async insertAppointments(appointments: Appointment[]): Promise<WriteResult> {
+    if (!isSupabaseConfigured || !supabase) return { ok: false, error: 'Supabase não configurado.' };
+    if (appointments.some(a => !isUuid(a.id) || !isUuid(a.psychologist_id) || !isUuid(a.patient_id))) {
+      return { ok: false, error: 'O paciente ou a sua conta ainda não estão sincronizados com o banco. Saia e entre novamente.' };
+    }
     try {
       const { error } = await supabase
         .from('appointments')
-        .update({
-          ...updates,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', id);
-
-      return !error;
-    } catch (err) {
+        .upsert(appointments.map(toAppointmentRow), { onConflict: 'id' });
+      if (error) {
+        console.error('Erro ao salvar agendamento:', error);
+        return { ok: false, error: describeDbError(error, 'Não foi possível salvar o agendamento') };
+      }
+      return { ok: true };
+    } catch (err: any) {
       console.error('Erro de rede:', err);
-      return false;
+      return { ok: false, error: `Sem conexão com o servidor: ${err?.message || err}` };
+    }
+  },
+
+  async updateAppointment(id: string, updates: Partial<Appointment>): Promise<WriteResult> {
+    if (!isSupabaseConfigured || !supabase) return { ok: false, error: 'Supabase não configurado.' };
+    if (!isUuid(id)) return { ok: false, error: 'Este agendamento ainda não foi gravado no banco.' };
+    try {
+      const { error } = await supabase
+        .from('appointments')
+        .update({ ...toAppointmentRow(updates), updated_at: new Date().toISOString() })
+        .eq('id', id);
+      if (error) {
+        console.error('Erro ao atualizar agendamento:', error);
+        return { ok: false, error: describeDbError(error, 'Não foi possível atualizar o agendamento') };
+      }
+      return { ok: true };
+    } catch (err: any) {
+      console.error('Erro de rede:', err);
+      return { ok: false, error: `Sem conexão com o servidor: ${err?.message || err}` };
     }
   },
 
@@ -730,6 +761,136 @@ export const SupabaseService = {
     } catch (err) {
       console.error('Erro ao deletar agendamento:', err);
       return false;
+    }
+  },
+
+  // ==========================================
+  // SALAS
+  // ==========================================
+  /** null = a consulta falhou (ex.: migração 07 pendente): a tela mantém o que já tem. */
+  async getRooms(psychologistId: string): Promise<ClinicRoom[] | null> {
+    if (!isSupabaseConfigured || !supabase || !isUuid(psychologistId)) return null;
+    try {
+      const { data, error } = await supabase.from('clinic_rooms').select('*').order('name', { ascending: true });
+      if (error) {
+        console.warn('Erro ao buscar salas:', error.message);
+        return null;
+      }
+      return (data || []).map((r: any) => ({ ...r, clinic_id: r.clinic_id || '', description: r.description || '' }));
+    } catch (err) {
+      console.warn('Erro de conexão:', err);
+      return null;
+    }
+  },
+
+  async upsertRoom(room: ClinicRoom, psychologistId: string): Promise<WriteResult> {
+    if (!isSupabaseConfigured || !supabase) return { ok: false, error: 'Supabase não configurado.' };
+    if (!isUuid(room.id) || !isUuid(psychologistId)) {
+      return { ok: false, error: 'Sua conta de psicólogo ainda não está sincronizada com o banco. Saia e entre novamente.' };
+    }
+    try {
+      const { error } = await supabase.from('clinic_rooms').upsert([{
+        id: room.id,
+        psychologist_id: psychologistId,
+        clinic_id: isUuid(room.clinic_id) ? room.clinic_id : null,
+        name: room.name,
+        room_number: room.room_number || null,
+        type: room.type,
+        capacity: room.capacity,
+        description: room.description || '',
+        status: room.status,
+        updated_at: new Date().toISOString(),
+      }], { onConflict: 'id' });
+      if (error) {
+        console.error('Erro ao salvar sala:', error);
+        return { ok: false, error: describeDbError(error, 'Não foi possível salvar a sala') };
+      }
+      return { ok: true };
+    } catch (err: any) {
+      return { ok: false, error: `Sem conexão com o servidor: ${err?.message || err}` };
+    }
+  },
+
+  async deleteRoom(id: string): Promise<WriteResult> {
+    if (!isSupabaseConfigured || !supabase) return { ok: false, error: 'Supabase não configurado.' };
+    try {
+      const { error } = await supabase.from('clinic_rooms').delete().eq('id', id);
+      if (error) return { ok: false, error: describeDbError(error, 'Não foi possível excluir a sala') };
+      return { ok: true };
+    } catch (err: any) {
+      return { ok: false, error: `Sem conexão com o servidor: ${err?.message || err}` };
+    }
+  },
+
+  // ==========================================
+  // AGENDAMENTO ONLINE: CONFIGURAÇÃO E SOLICITAÇÕES
+  // ==========================================
+  async getBookingSettings(psychologistId: string): Promise<BookingSettings | null> {
+    if (!isSupabaseConfigured || !supabase || !isUuid(psychologistId)) return null;
+    try {
+      const { data, error } = await supabase
+        .from('booking_settings')
+        .select('*')
+        .eq('psychologist_id', psychologistId)
+        .maybeSingle();
+      if (error) {
+        console.warn('Erro ao buscar configuração de agendamento:', error.message);
+        return null;
+      }
+      return data;
+    } catch (err) {
+      console.warn('Erro de conexão:', err);
+      return null;
+    }
+  },
+
+  async saveBookingSettings(settings: BookingSettings): Promise<WriteResult> {
+    if (!isSupabaseConfigured || !supabase) return { ok: false, error: 'Supabase não configurado.' };
+    if (!isUuid(settings.psychologist_id)) {
+      return { ok: false, error: 'Sua conta de psicólogo ainda não está sincronizada com o banco. Saia e entre novamente.' };
+    }
+    try {
+      const { error } = await supabase
+        .from('booking_settings')
+        .upsert([{ ...settings, updated_at: new Date().toISOString() }], { onConflict: 'psychologist_id' });
+      if (error) {
+        if (error.code === '23505') return { ok: false, error: 'Este endereço do link já está em uso por outro profissional. Escolha outro.' };
+        console.error('Erro ao salvar configuração de agendamento:', error);
+        return { ok: false, error: describeDbError(error, 'Não foi possível salvar a configuração') };
+      }
+      return { ok: true };
+    } catch (err: any) {
+      return { ok: false, error: `Sem conexão com o servidor: ${err?.message || err}` };
+    }
+  },
+
+  async getBookingRequests(psychologistId: string): Promise<BookingRequest[] | null> {
+    if (!isSupabaseConfigured || !supabase || !isUuid(psychologistId)) return null;
+    try {
+      const { data, error } = await supabase
+        .from('booking_requests')
+        .select('*')
+        .eq('psychologist_id', psychologistId)
+        .order('requested_start', { ascending: true });
+      if (error) {
+        console.warn('Erro ao buscar solicitações de agendamento:', error.message);
+        return null;
+      }
+      return data || [];
+    } catch (err) {
+      console.warn('Erro de conexão:', err);
+      return null;
+    }
+  },
+
+  async updateBookingRequest(id: string, updates: Partial<BookingRequest>): Promise<WriteResult> {
+    if (!isSupabaseConfigured || !supabase) return { ok: false, error: 'Supabase não configurado.' };
+    try {
+      const { error } = await supabase.from('booking_requests').update(updates).eq('id', id);
+      if (error) return { ok: false, error: describeDbError(error, 'Não foi possível atualizar a solicitação') };
+      return { ok: true };
+    } catch (err: any) {
+      return { ok: false, error: `Sem conexão com o servidor: ${err?.message || err}` };
     }
   },
 
