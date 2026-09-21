@@ -77,6 +77,21 @@ function runMedicalRecordExportTests() {
   assert.strictEqual(dossier.totalSessionsCompleted, 1);
   console.log('✅ PASS: Consolidação de histórico de sessões');
 
+  // Teste 4: anamnese legível, só do paciente, sem o token do link
+  const secretToken = 't'.repeat(64);
+  const anamnesis = (patientId: string, id: string) => ({
+    id, psychologist_id: 'psy', patient_id: patientId, template_id: 'system:adulto', template_name: 'Anamnese adulto',
+    template_snapshot: [{ id: 's', type: 'section' as const, label: 'Geral' }, { id: 'q1', type: 'boolean' as const, label: 'Já fez terapia?' }, { id: 'q2', type: 'textarea' as const, label: 'Queixa' }],
+    answers: { q1: false, q2: 'Ansiedade' }, status: 'sent' as const, filled_by: 'patient' as const, fill_token: secretToken,
+    token_expires_at: '2026-12-01T00:00:00Z', created_at: '2026-09-01T00:00:00Z', updated_at: '2026-09-01T00:00:00Z',
+  });
+  const withAnamnesis = buildMedicalRecordDossier(mockPatient, mockSessions, [], mockDiaries, [], [anamnesis(mockPatient.id, 'a1'), anamnesis('outro-paciente', 'a2')]);
+  assert.strictEqual(withAnamnesis.anamneses.length, 1, 'anamnese de outro paciente não pode entrar no dossiê');
+  assert.deepStrictEqual(withAnamnesis.anamneses[0].questions, [{ question: 'Já fez terapia?', answer: 'Não' }, { question: 'Queixa', answer: 'Ansiedade' }]);
+  assert.ok(!JSON.stringify(withAnamnesis).includes(secretToken), 'o token do link de preenchimento nunca é exportado');
+  assert.strictEqual(dossier.anamneses.length, 0);
+  console.log('✅ PASS: Anamnese exportada em formato legível, sem token e sem dados de terceiros');
+
   console.log('🎉 Todos os testes de exportação de prontuário passaram com sucesso!');
 }
 

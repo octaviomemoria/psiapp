@@ -152,6 +152,8 @@ export interface PatientGroup {
   id: string;
   psychologist_id: string;
   name: string;
+  /** Modelo de anamnese importado para pacientes deste grupo (id de modelo do sistema "system:..." ou personalizado). */
+  anamnesis_template_id?: string | null;
   created_at?: string;
 }
 
@@ -629,4 +631,59 @@ export interface BookingRequest {
   decline_reason?: string | null;
   decided_at?: string | null;
   created_at: string;
+}
+
+// =============================================================================
+// ANAMNESE (migração 09)
+// =============================================================================
+
+export type AnamnesisFieldType = 'section' | 'text' | 'textarea' | 'radio' | 'checkbox' | 'boolean' | 'date' | 'scale_10';
+
+export interface AnamnesisField {
+  id: string;
+  /** 'section' é só um título que separa blocos de perguntas (não recebe resposta). */
+  type: AnamnesisFieldType;
+  label: string;
+  description?: string;
+  placeholder?: string;
+  required?: boolean;
+  /** Opções de 'radio' (uma) e 'checkbox' (várias). */
+  options?: string[];
+}
+
+export interface AnamnesisTemplate {
+  id: string;
+  /** Vazio nos modelos do sistema (que ficam no código, não no banco). */
+  psychologist_id?: string | null;
+  name: string;
+  category: string;
+  description?: string;
+  schema: AnamnesisField[];
+  is_system?: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export type AnamnesisAnswerValue = string | string[] | boolean | number | null;
+export type AnamnesisAnswers = Record<string, AnamnesisAnswerValue>;
+
+export type AnamnesisStatus = 'sent' | 'draft' | 'completed';
+
+export interface AnamnesisResponse {
+  id: string;
+  psychologist_id: string;
+  patient_id: string;
+  template_id: string;
+  template_name: string;
+  /** Cópia das perguntas no momento da criação: editar o modelo depois não altera respostas antigas. */
+  template_snapshot: AnamnesisField[];
+  answers: AnamnesisAnswers;
+  status: AnamnesisStatus;
+  filled_by: 'psychologist' | 'patient';
+  completed_at?: string | null;
+  /** Link de preenchimento pelo paciente (uso único). Some depois que o paciente envia. */
+  fill_token?: string | null;
+  token_expires_at?: string | null;
+  created_at: string;
+  updated_at: string;
 }

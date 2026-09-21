@@ -29,7 +29,7 @@ export const ExportRecordModal: React.FC<ExportRecordModalProps> = ({
   onClose,
   patientId
 }) => {
-  const { patients, appointments, sessions, psychometricResults, currentPsychologist } = usePsi();
+  const { patients, appointments, sessions, psychometricResults, currentPsychologist, anamnesisResponses } = usePsi();
   const [includeScales, setIncludeScales] = useState(true);
   const [includeSOAP, setIncludeSOAP] = useState(true);
   const [isExporting, setIsExporting] = useState(false);
@@ -73,7 +73,8 @@ export const ExportRecordModal: React.FC<ExportRecordModalProps> = ({
       sessions,
       (psychometricResults as any) || [],
       [],
-      []
+      [],
+      anamnesisResponses
     );
     downloadMedicalRecordDossier(dossier);
   };

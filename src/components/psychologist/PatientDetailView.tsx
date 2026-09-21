@@ -36,7 +36,9 @@ import {
   Sparkles,
   Send,
   Printer,
-  DollarSign
+  DollarSign,
+  ClipboardCheck,
+  TrendingUp
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -48,6 +50,8 @@ import { formatDate, formatDateTime, formatRelativeDate } from '@/lib/utils';
 import { SessionFormModal } from './SessionFormModal';
 import { PatientFormModal } from './PatientFormModal';
 import { PatientFinancialTab } from './reports/PatientFinancialTab';
+import { PatientAnamnesisTab } from '@/components/anamnesis/PatientAnamnesisTab';
+import { PatientEvolutionTab } from '@/components/anamnesis/PatientEvolutionTab';
 import { calculateAge, formatCPF, formatCEP } from '@/lib/utils/masks';
 import { ExerciseBuilderModal } from './ExerciseBuilderModal';
 import { ExerciseReviewModal } from './ExerciseReviewModal';
@@ -74,7 +78,7 @@ interface PatientDetailViewProps {
   onBack: () => void;
 }
 
-type TabType = 'overview' | 'timeline' | 'sessions' | 'goals' | 'exercises' | 'scales' | 'diary' | 'mood' | 'contents' | 'financial';
+type TabType = 'overview' | 'timeline' | 'sessions' | 'goals' | 'exercises' | 'scales' | 'diary' | 'mood' | 'contents' | 'financial' | 'anamnesis' | 'evolution';
 
 export const PatientDetailView: React.FC<PatientDetailViewProps> = ({ patientId, onBack }) => {
   const {
@@ -217,6 +221,8 @@ export const PatientDetailView: React.FC<PatientDetailViewProps> = ({ patientId,
     { id: 'diary', label: 'Diário Compartilhado', icon: BookOpen, count: sharedDiaryEntries.length },
     { id: 'mood', label: 'Humor & Evolução', icon: Heart, count: patientMoods.length },
     { id: 'contents', label: 'Conteúdos', icon: FileText, count: patientAssignedContents.length },
+    { id: 'anamnesis', label: 'Anamnese', icon: ClipboardCheck },
+    { id: 'evolution', label: 'Evolução', icon: TrendingUp },
     { id: 'financial', label: 'Financeiro', icon: DollarSign },
   ];
 
@@ -1170,6 +1176,10 @@ export const PatientDetailView: React.FC<PatientDetailViewProps> = ({ patientId,
       )}
 
       {/* 7. ABA: CONTEÚDOS E MATERIAIS */}
+      {activeTab === 'anamnesis' && <PatientAnamnesisTab patient={patient} />}
+
+      {activeTab === 'evolution' && <PatientEvolutionTab patient={patient} />}
+
       {activeTab === 'financial' && <PatientFinancialTab patient={patient} />}
 
       {activeTab === 'contents' && (

@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Loader2, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { usePsi } from '@/lib/store/psi-context';
+import { allTemplates } from '@/lib/anamnesis/anamnesis-utils';
 import { Patient } from '@/types/database';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
@@ -161,7 +162,7 @@ const Check: React.FC<{ checked: boolean; onChange: (v: boolean) => void; childr
 );
 
 export const PatientFormModal: React.FC<PatientFormModalProps> = ({ isOpen, onClose, patient, onSaved }) => {
-  const { patients, patientGroups, addPatient, updatePatient, addPatientGroup, renamePatientGroup, deletePatientGroup } = usePsi();
+  const { patients, patientGroups, addPatient, updatePatient, addPatientGroup, renamePatientGroup, deletePatientGroup, anamnesisTemplates, setPatientGroupTemplate } = usePsi();
 
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
@@ -414,9 +415,21 @@ export const PatientFormModal: React.FC<PatientFormModalProps> = ({ isOpen, onCl
                 ) : (
                   <ul className="divide-y divide-slate-200">
                     {patientGroups.map(g => (
-                      <li key={g.id} className="flex items-center justify-between py-1.5 text-sm text-slate-700">
+                      <li key={g.id} className="flex flex-wrap items-center justify-between gap-2 py-1.5 text-sm text-slate-700">
                         <span>{g.name}</span>
                         <span className="flex items-center gap-1">
+                          <select
+                            value={g.anamnesis_template_id || ''}
+                            onChange={async e => {
+                              const result = await setPatientGroupTemplate(g.id, e.target.value || null);
+                              setGroupError(result.ok ? '' : result.error || 'Não foi possível vincular o modelo.');
+                            }}
+                            aria-label={`Modelo de anamnese do grupo ${g.name}`}
+                            className="px-2 py-1 text-xs rounded-lg border border-slate-200 bg-white"
+                          >
+                            <option value="">Sem modelo de anamnese</option>
+                            {allTemplates(anamnesisTemplates).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                          </select>
                           <button type="button" title="Renomear" onClick={() => handleRenameGroup(g.id, g.name)} className="p-1.5 text-slate-400 hover:text-teal-700 rounded-lg hover:bg-white">
                             <Pencil className="w-3.5 h-3.5" />
                           </button>

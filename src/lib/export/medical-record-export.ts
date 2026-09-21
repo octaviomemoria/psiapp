@@ -3,7 +3,8 @@
  * Consolida todo o histórico do paciente em um arquivo JSON auditável e interoperável.
  */
 
-import { Patient, TherapySession, DiaryEntry, PsychometricRecord, ConsentRecord } from '@/types/database';
+import { Patient, TherapySession, DiaryEntry, PsychometricRecord, ConsentRecord, AnamnesisResponse } from '@/types/database';
+import { answersToRows } from '@/lib/anamnesis/anamnesis-utils';
 
 export interface MedicalRecordDossier {
   exportMetadata: {
@@ -18,6 +19,16 @@ export interface MedicalRecordDossier {
   psychometrics: Partial<PsychometricRecord>[];
   authorizedDiaries: Partial<DiaryEntry>[];
   consents: Partial<ConsentRecord>[];
+  /** Perguntas e respostas legíveis. O token do link de preenchimento nunca é exportado. */
+  anamneses: {
+    id: string;
+    template_name: string;
+    status: AnamnesisResponse['status'];
+    filled_by: AnamnesisResponse['filled_by'];
+    created_at: string;
+    completed_at?: string | null;
+    questions: { question: string; answer: string }[];
+  }[];
   totalSessionsCompleted: number;
 }
 
@@ -29,7 +40,8 @@ export function buildMedicalRecordDossier(
   sessions: TherapySession[],
   psychometrics: PsychometricRecord[] = [],
   diaries: DiaryEntry[] = [],
-  consents: ConsentRecord[] = []
+  consents: ConsentRecord[] = [],
+  anamneses: AnamnesisResponse[] = []
 ): MedicalRecordDossier {
   const patientSessions = sessions.filter(s => s.patient_id === patient.id);
   const patientPsychometrics = psychometrics.filter(p => p.patient_id === patient.id);
@@ -68,6 +80,19 @@ export function buildMedicalRecordDossier(
     psychometrics: patientPsychometrics,
     authorizedDiaries: patientDiaries,
     consents: patientConsents,
+    anamneses: anamneses
+      .filter(a => a.patient_id === patient.id)
+      .map(a => ({
+        id: a.id,
+        template_name: a.template_name,
+        status: a.status,
+        filled_by: a.filled_by,
+        created_at: a.created_at,
+        completed_at: a.completed_at,
+        questions: answersToRows(a.template_snapshot, a.answers)
+          .filter(r => r.kind === 'answer')
+          .map(r => ({ question: r.label, answer: r.text })),
+      })),
     totalSessionsCompleted: patientSessions.filter(s => s.status === 'finalized' || (s.status as string) === 'completed').length,
   };
 }

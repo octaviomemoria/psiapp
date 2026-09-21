@@ -8,6 +8,8 @@ import {
   PatientGroup,
   BookingSettings,
   BookingRequest,
+  AnamnesisTemplate,
+  AnamnesisResponse,
   RecurrenceRule,
   Appointment,
   TherapySession,
@@ -72,6 +74,7 @@ import { SupabaseService, WriteResult } from '@/lib/supabase/service';
 import { newUuid } from '@/lib/utils';
 import { getBillingResponsible } from '@/lib/utils/patient';
 import { expandRecurrence, findConflicts } from '@/lib/calendar/schedule-utils';
+import { FILL_LINK_VALID_DAYS, generateFillToken } from '@/lib/anamnesis/anamnesis-utils';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 
 interface PsiContextType {
@@ -175,6 +178,16 @@ interface PsiContextType {
   updateRoom: (id: string, updates: Partial<ClinicRoom>) => Promise<WriteResult>;
   deleteRoom: (id: string) => Promise<WriteResult>;
 
+  // Anamnese
+  anamnesisTemplates: AnamnesisTemplate[];
+  anamnesisResponses: AnamnesisResponse[];
+  saveAnamnesisTemplate: (template: AnamnesisTemplate) => Promise<WriteResult<AnamnesisTemplate>>;
+  deleteAnamnesisTemplate: (id: string) => Promise<WriteResult>;
+  setPatientGroupTemplate: (groupId: string, templateId: string | null) => Promise<WriteResult>;
+  createAnamnesisResponse: (patientId: string, template: AnamnesisTemplate, mode: 'fill' | 'link') => Promise<WriteResult<AnamnesisResponse>>;
+  updateAnamnesisResponse: (id: string, updates: Partial<Pick<AnamnesisResponse, 'answers' | 'status' | 'fill_token' | 'token_expires_at'>>) => Promise<WriteResult<AnamnesisResponse>>;
+  deleteAnamnesisResponse: (id: string) => Promise<WriteResult>;
+
   // Agendamento online
   bookingSettings: BookingSettings | null;
   bookingRequests: BookingRequest[];
@@ -267,6 +280,8 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [voiceAnchors, setVoiceAnchors] = useState<VoiceAnchor[]>(INITIAL_VOICE_ANCHORS);
   const [patientInvites, setPatientInvites] = useState<PatientInvite[]>(INITIAL_INVITES);
   const [bookingSettings, setBookingSettings] = useState<BookingSettings | null>(null);
+  const [anamnesisTemplates, setAnamnesisTemplates] = useState<AnamnesisTemplate[]>([]);
+  const [anamnesisResponses, setAnamnesisResponses] = useState<AnamnesisResponse[]>([]);
   const [bookingRequests, setBookingRequests] = useState<BookingRequest[]>([]);
 
   // Estados do Módulo Financeiro, Livro Caixa & Pacotes
@@ -303,6 +318,8 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setPatientGroups([]);
     setBookingSettings(null);
     setBookingRequests([]);
+    setAnamnesisTemplates([]);
+    setAnamnesisResponses([]);
     setAppointments(INITIAL_APPOINTMENTS);
     setSessions(INITIAL_SESSIONS);
     setGoals(INITIAL_GOALS);
@@ -372,7 +389,9 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             liveGroups,
             liveRooms,
             liveBookingSettings,
-            liveBookingRequests
+            liveBookingRequests,
+            liveAnamnesisTemplates,
+            liveAnamnesisResponses
           ] = await Promise.all([
             SupabaseService.getPatients(psychologist.id),
             SupabaseService.getAppointments(psychologist.id),
@@ -393,7 +412,13 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             SupabaseService.getRooms(psychologist.id),
             SupabaseService.getBookingSettings(psychologist.id),
             SupabaseService.getBookingRequests(psychologist.id),
+            SupabaseService.getAnamnesisTemplates(psychologist.id),
+            SupabaseService.getAnamnesisResponses(psychologist.id),
           ]);
+
+          // null = consulta falhou (ex.: migração 09 pendente): mantém o que já está na tela.
+          if (liveAnamnesisTemplates) setAnamnesisTemplates(liveAnamnesisTemplates);
+          if (liveAnamnesisResponses) setAnamnesisResponses(liveAnamnesisResponses);
 
           // null = consulta falhou (ex.: migração 07 pendente): mantém o que já está na tela.
           if (liveRooms) setClinicRooms(liveRooms);
@@ -491,6 +516,8 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setPatientGroups([]);
     setBookingSettings(null);
     setBookingRequests([]);
+    setAnamnesisTemplates([]);
+    setAnamnesisResponses([]);
     setAppointments([]);
     setSessions([]);
     setGoals([]);
@@ -569,6 +596,9 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, () => {
         loadLiveDataFromSupabase();
       })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'anamnesis_responses' }, () => {
+        loadLiveDataFromSupabase();
+      })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'booking_requests' }, () => {
         loadLiveDataFromSupabase();
       })
@@ -606,6 +636,8 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (parsed.patients) setPatients(parsed.patients);
           if (parsed.patientGroups) setPatientGroups(parsed.patientGroups);
           if (parsed.bookingSettings) setBookingSettings(parsed.bookingSettings);
+          if (parsed.anamnesisTemplates) setAnamnesisTemplates(parsed.anamnesisTemplates);
+          if (parsed.anamnesisResponses) setAnamnesisResponses(parsed.anamnesisResponses);
           if (parsed.bookingRequests) setBookingRequests(parsed.bookingRequests);
           if (parsed.appointments) setAppointments(parsed.appointments);
           if (parsed.sessions) setSessions(parsed.sessions);
@@ -648,6 +680,8 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         patientGroups,
         bookingSettings,
         bookingRequests,
+        anamnesisTemplates,
+        anamnesisResponses,
         appointments,
         sessions,
         goals,
@@ -683,6 +717,8 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     patientGroups,
     bookingSettings,
     bookingRequests,
+    anamnesisTemplates,
+    anamnesisResponses,
     appointments,
     sessions,
     goals,
@@ -1646,6 +1682,135 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [clinicRooms, shouldPersistRooms, currentPsychologist.id]);
 
+  // Anamnese: modelos personalizados, respostas e vínculo grupo -> modelo
+  const saveAnamnesisTemplate = useCallback(async (template: AnamnesisTemplate): Promise<WriteResult<AnamnesisTemplate>> => {
+    const toSave: AnamnesisTemplate = {
+      ...template,
+      psychologist_id: currentPsychologist.id,
+      is_system: false,
+      updated_at: new Date().toISOString(),
+    };
+    const previous = anamnesisTemplates.find(t => t.id === toSave.id);
+    setAnamnesisTemplates(prev => [...prev.filter(t => t.id !== toSave.id), toSave].sort((a, b) => a.name.localeCompare(b.name)));
+    if (isSupabaseConfigured && isLiveProduction) {
+      const result = await SupabaseService.upsertAnamnesisTemplate(toSave, currentPsychologist.id);
+      if (!result.ok) {
+        setAnamnesisTemplates(prev => previous ? prev.map(t => t.id === toSave.id ? previous : t) : prev.filter(t => t.id !== toSave.id));
+        return { ok: false, error: result.error };
+      }
+    }
+    return { ok: true, data: toSave };
+  }, [anamnesisTemplates, currentPsychologist.id, isLiveProduction]);
+
+  const deleteAnamnesisTemplate = useCallback(async (id: string): Promise<WriteResult> => {
+    const previous = anamnesisTemplates.find(t => t.id === id);
+    if (!previous) return { ok: true };
+    setAnamnesisTemplates(prev => prev.filter(t => t.id !== id));
+    // Grupos que apontavam para o modelo apagado voltam a não ter modelo.
+    const affected = patientGroups.filter(g => g.anamnesis_template_id === id).map(g => g.id);
+    setPatientGroups(prev => prev.map(g => g.anamnesis_template_id === id ? { ...g, anamnesis_template_id: null } : g));
+    if (isSupabaseConfigured && isLiveProduction) {
+      const result = await SupabaseService.deleteAnamnesisTemplate(id);
+      if (!result.ok) {
+        setAnamnesisTemplates(prev => [...prev, previous].sort((a, b) => a.name.localeCompare(b.name)));
+        setPatientGroups(prev => prev.map(g => affected.includes(g.id) ? { ...g, anamnesis_template_id: id } : g));
+        return result;
+      }
+      await Promise.all(affected.map(groupId => SupabaseService.setPatientGroupTemplate(groupId, null)));
+    }
+    return { ok: true };
+  }, [anamnesisTemplates, patientGroups, isLiveProduction]);
+
+  const setPatientGroupTemplate = useCallback(async (groupId: string, templateId: string | null): Promise<WriteResult> => {
+    const previous = patientGroups.find(g => g.id === groupId);
+    if (!previous) return { ok: false, error: 'Grupo não encontrado.' };
+    setPatientGroups(prev => prev.map(g => g.id === groupId ? { ...g, anamnesis_template_id: templateId } : g));
+    if (isSupabaseConfigured && isLiveProduction) {
+      const result = await SupabaseService.setPatientGroupTemplate(groupId, templateId);
+      if (!result.ok) {
+        setPatientGroups(prev => prev.map(g => g.id === groupId ? previous : g));
+        return result;
+      }
+    }
+    return { ok: true };
+  }, [patientGroups, isLiveProduction]);
+
+  /** mode "fill": psicólogo preenche (rascunho). mode "link": gera link de uso único para o paciente. */
+  const createAnamnesisResponse = useCallback(async (
+    patientId: string,
+    template: AnamnesisTemplate,
+    mode: 'fill' | 'link'
+  ): Promise<WriteResult<AnamnesisResponse>> => {
+    const nowIso = new Date().toISOString();
+    const response: AnamnesisResponse = {
+      id: newUuid(),
+      psychologist_id: currentPsychologist.id,
+      patient_id: patientId,
+      template_id: template.id,
+      template_name: template.name,
+      template_snapshot: template.schema.map(f => ({ ...f, options: f.options ? [...f.options] : undefined })),
+      answers: {},
+      status: mode === 'link' ? 'sent' : 'draft',
+      filled_by: mode === 'link' ? 'patient' : 'psychologist',
+      completed_at: null,
+      fill_token: mode === 'link' ? generateFillToken() : null,
+      token_expires_at: mode === 'link' ? new Date(Date.now() + FILL_LINK_VALID_DAYS * 86_400_000).toISOString() : null,
+      created_at: nowIso,
+      updated_at: nowIso,
+    };
+    setAnamnesisResponses(prev => [response, ...prev]);
+    if (isSupabaseConfigured && isLiveProduction) {
+      const result = await SupabaseService.upsertAnamnesisResponse(response);
+      if (!result.ok) {
+        setAnamnesisResponses(prev => prev.filter(r => r.id !== response.id));
+        return { ok: false, error: result.error };
+      }
+    }
+    return { ok: true, data: response };
+  }, [currentPsychologist.id, isLiveProduction]);
+
+  const updateAnamnesisResponse = useCallback(async (
+    id: string,
+    updates: Partial<Pick<AnamnesisResponse, 'answers' | 'status' | 'fill_token' | 'token_expires_at'>>
+  ): Promise<WriteResult<AnamnesisResponse>> => {
+    const previous = anamnesisResponses.find(r => r.id === id);
+    if (!previous) return { ok: false, error: 'Anamnese não encontrada.' };
+    const next: AnamnesisResponse = {
+      ...previous,
+      ...updates,
+      updated_at: new Date().toISOString(),
+      completed_at: updates.status === 'completed' ? (previous.completed_at || new Date().toISOString()) : updates.status ? null : previous.completed_at,
+    };
+    // Quando o psicólogo conclui ou edita, o link do paciente deixa de valer.
+    if (updates.status === 'completed') {
+      next.fill_token = null;
+      next.token_expires_at = null;
+    }
+    setAnamnesisResponses(prev => prev.map(r => r.id === id ? next : r));
+    if (isSupabaseConfigured && isLiveProduction) {
+      const result = await SupabaseService.upsertAnamnesisResponse(next);
+      if (!result.ok) {
+        setAnamnesisResponses(prev => prev.map(r => r.id === id ? previous : r));
+        return { ok: false, error: result.error };
+      }
+    }
+    return { ok: true, data: next };
+  }, [anamnesisResponses, isLiveProduction]);
+
+  const deleteAnamnesisResponse = useCallback(async (id: string): Promise<WriteResult> => {
+    const previous = anamnesisResponses.find(r => r.id === id);
+    if (!previous) return { ok: true };
+    setAnamnesisResponses(prev => prev.filter(r => r.id !== id));
+    if (isSupabaseConfigured && isLiveProduction) {
+      const result = await SupabaseService.deleteAnamnesisResponse(id);
+      if (!result.ok) {
+        setAnamnesisResponses(prev => [previous, ...prev]);
+        return result;
+      }
+    }
+    return { ok: true };
+  }, [anamnesisResponses, isLiveProduction]);
+
   // Agendamento online: configuração do link público e solicitações recebidas
   const saveBookingSettings = useCallback(async (settings: BookingSettings): Promise<WriteResult> => {
     const previous = bookingSettings;
@@ -2033,6 +2198,14 @@ export const PsiProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addRoom,
         updateRoom,
         deleteRoom,
+        anamnesisTemplates,
+        anamnesisResponses,
+        saveAnamnesisTemplate,
+        deleteAnamnesisTemplate,
+        setPatientGroupTemplate,
+        createAnamnesisResponse,
+        updateAnamnesisResponse,
+        deleteAnamnesisResponse,
         bookingSettings,
         bookingRequests,
         saveBookingSettings,

@@ -8,6 +8,8 @@ import {
   ClinicRoom,
   BookingSettings,
   BookingRequest,
+  AnamnesisTemplate,
+  AnamnesisResponse,
   TherapySession,
   SessionPrivateNotes,
   Goal,
@@ -816,6 +818,131 @@ export const SupabaseService = {
     try {
       const { error } = await supabase.from('clinic_rooms').delete().eq('id', id);
       if (error) return { ok: false, error: describeDbError(error, 'Não foi possível excluir a sala') };
+      return { ok: true };
+    } catch (err: any) {
+      return { ok: false, error: `Sem conexão com o servidor: ${err?.message || err}` };
+    }
+  },
+
+  // ==========================================
+  // ANAMNESE
+  // ==========================================
+  /** null = a consulta falhou (ex.: migração 09 pendente): a tela mantém o que já tem. */
+  async getAnamnesisTemplates(psychologistId: string): Promise<AnamnesisTemplate[] | null> {
+    if (!isSupabaseConfigured || !supabase || !isUuid(psychologistId)) return null;
+    try {
+      const { data, error } = await supabase
+        .from('anamnesis_templates')
+        .select('*')
+        .eq('psychologist_id', psychologistId)
+        .order('name', { ascending: true });
+      if (error) {
+        console.warn('Erro ao buscar modelos de anamnese:', error.message);
+        return null;
+      }
+      return data || [];
+    } catch (err) {
+      console.warn('Erro de conexão:', err);
+      return null;
+    }
+  },
+
+  async upsertAnamnesisTemplate(template: AnamnesisTemplate, psychologistId: string): Promise<WriteResult> {
+    if (!isSupabaseConfigured || !supabase) return { ok: false, error: 'Supabase não configurado.' };
+    if (!isUuid(template.id) || !isUuid(psychologistId)) {
+      return { ok: false, error: 'Sua conta de psicólogo ainda não está sincronizada com o banco. Saia e entre novamente.' };
+    }
+    try {
+      const { error } = await supabase.from('anamnesis_templates').upsert([{
+        id: template.id,
+        psychologist_id: psychologistId,
+        name: template.name,
+        category: template.category || 'Personalizado',
+        description: template.description || null,
+        schema: template.schema,
+        updated_at: new Date().toISOString(),
+      }], { onConflict: 'id' });
+      if (error) return { ok: false, error: describeDbError(error, 'Não foi possível salvar o modelo') };
+      return { ok: true };
+    } catch (err: any) {
+      return { ok: false, error: `Sem conexão com o servidor: ${err?.message || err}` };
+    }
+  },
+
+  async deleteAnamnesisTemplate(id: string): Promise<WriteResult> {
+    if (!isSupabaseConfigured || !supabase) return { ok: false, error: 'Supabase não configurado.' };
+    try {
+      const { error } = await supabase.from('anamnesis_templates').delete().eq('id', id);
+      if (error) return { ok: false, error: describeDbError(error, 'Não foi possível excluir o modelo') };
+      return { ok: true };
+    } catch (err: any) {
+      return { ok: false, error: `Sem conexão com o servidor: ${err?.message || err}` };
+    }
+  },
+
+  async getAnamnesisResponses(psychologistId: string): Promise<AnamnesisResponse[] | null> {
+    if (!isSupabaseConfigured || !supabase || !isUuid(psychologistId)) return null;
+    try {
+      const { data, error } = await supabase
+        .from('anamnesis_responses')
+        .select('*')
+        .eq('psychologist_id', psychologistId)
+        .order('created_at', { ascending: false });
+      if (error) {
+        console.warn('Erro ao buscar anamneses:', error.message);
+        return null;
+      }
+      return data || [];
+    } catch (err) {
+      console.warn('Erro de conexão:', err);
+      return null;
+    }
+  },
+
+  async upsertAnamnesisResponse(response: AnamnesisResponse): Promise<WriteResult> {
+    if (!isSupabaseConfigured || !supabase) return { ok: false, error: 'Supabase não configurado.' };
+    if (!isUuid(response.id) || !isUuid(response.psychologist_id) || !isUuid(response.patient_id)) {
+      return { ok: false, error: 'O paciente ou a sua conta ainda não estão sincronizados com o banco. Saia e entre novamente.' };
+    }
+    try {
+      const { error } = await supabase.from('anamnesis_responses').upsert([{
+        id: response.id,
+        psychologist_id: response.psychologist_id,
+        patient_id: response.patient_id,
+        template_id: response.template_id,
+        template_name: response.template_name,
+        template_snapshot: response.template_snapshot,
+        answers: response.answers,
+        status: response.status,
+        filled_by: response.filled_by,
+        completed_at: response.completed_at || null,
+        fill_token: response.fill_token || null,
+        token_expires_at: response.token_expires_at || null,
+        updated_at: new Date().toISOString(),
+      }], { onConflict: 'id' });
+      if (error) return { ok: false, error: describeDbError(error, 'Não foi possível salvar a anamnese') };
+      return { ok: true };
+    } catch (err: any) {
+      return { ok: false, error: `Sem conexão com o servidor: ${err?.message || err}` };
+    }
+  },
+
+  async deleteAnamnesisResponse(id: string): Promise<WriteResult> {
+    if (!isSupabaseConfigured || !supabase) return { ok: false, error: 'Supabase não configurado.' };
+    try {
+      const { error } = await supabase.from('anamnesis_responses').delete().eq('id', id);
+      if (error) return { ok: false, error: describeDbError(error, 'Não foi possível excluir a anamnese') };
+      return { ok: true };
+    } catch (err: any) {
+      return { ok: false, error: `Sem conexão com o servidor: ${err?.message || err}` };
+    }
+  },
+
+  async setPatientGroupTemplate(id: string, templateId: string | null): Promise<WriteResult> {
+    if (!isSupabaseConfigured || !supabase) return { ok: false, error: 'Supabase não configurado.' };
+    try {
+      const { error } = await supabase.from('patient_groups').update({ anamnesis_template_id: templateId }).eq('id', id);
+      if (error) return { ok: false, error: describeDbError(error, 'Não foi possível vincular o modelo ao grupo') };
       return { ok: true };
     } catch (err: any) {
       return { ok: false, error: `Sem conexão com o servidor: ${err?.message || err}` };
