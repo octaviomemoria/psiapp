@@ -40,7 +40,8 @@ Construir e operar uma plataforma SaaS B2B profissional para psicólogos, clíni
 15. `15_RISCOS_DECISOES_ABERTAS.md` — Matriz de riscos operacionais, mitigação e decisões arquiteturais (ADRs).
 16. `16_GLOSSARIO.md` — Glossário de termos clínicos, técnicos e regulatórios.
 17. `17_HISTORICO_AUDITORIA_E_PRODUCAO.md` — Histórico de auditoria técnica, inconsistências corrigidas, homologação e guia de deploy.
-18. `DOCUMENTACAO_COMPLETA.md` — Documento unificado consolidando toda a especificação técnica do sistema.
+18. `18_PROXIMOS_PASSOS.md` — O que foi entregue na paridade de funcionalidades, checklist antes de produção e pendências.
+19. `DOCUMENTACAO_COMPLETA.md` — Documento unificado consolidando toda a especificação técnica do sistema.
 
 ## Stack em Produção
 
