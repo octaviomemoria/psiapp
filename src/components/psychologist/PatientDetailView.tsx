@@ -572,14 +572,23 @@ export const PatientDetailView: React.FC<PatientDetailViewProps> = ({ patientId,
               </CardHeader>
               <CardContent className="space-y-2 text-xs text-slate-600">
                 {lastSession ? (
-                  <div>
-                    <p className="font-semibold text-slate-800">
-                      Sessão #{lastSession.session_number} • {formatDate(lastSession.session_date)}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSessionToEdit(lastSession);
+                      setIsSessionModalOpen(true);
+                    }}
+                    title="Abrir registro da sessão para leitura e edição"
+                    className="group block w-full text-left rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500"
+                  >
+                    <p className="font-semibold text-slate-800 flex items-center justify-between gap-2">
+                      <span>Sessão #{lastSession.session_number} • {formatDate(lastSession.session_date)}</span>
+                      <Edit className="w-3.5 h-3.5 shrink-0 text-slate-400 group-hover:text-teal-700" />
                     </p>
-                    <p className="line-clamp-3 mt-1 bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                    <p className="line-clamp-3 mt-1 bg-slate-50 p-2.5 rounded-lg border border-slate-100 group-hover:border-teal-200 group-hover:bg-teal-50/40 transition-colors">
                       {lastSession.summary}
                     </p>
-                  </div>
+                  </button>
                 ) : (
                   <p className="text-slate-500">Nenhuma sessão anterior cadastrada.</p>
                 )}
