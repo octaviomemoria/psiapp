@@ -2,19 +2,27 @@ name: Supabase Keep-Alive Ping
 
 on:
   schedule:
-    # Executa todos os dias às 12:00 UTC (09:00 BRT)
-    - cron: '0 12 * * *'
+    # Mantém frequência diária; evita o pico de agendamentos na hora cheia.
+    - cron: '17 12 * * *'
   workflow_dispatch: # Permite disparar manualmente pela aba Actions do GitHub
+
+permissions: {}
+
+concurrency:
+  group: supabase-keepalive
+  cancel-in-progress: false
 
 jobs:
   ping-supabase:
     name: Ping Supabase Database
     runs-on: ubuntu-latest
+    timeout-minutes: 2
     steps:
       - name: Ping Supabase REST & Auth APIs
         env:
           SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL || secrets.SUPABASE_URL }}
-          SUPABASE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY || secrets.SUPABASE_ANON_KEY }}
+          # Prefere chave pública; fallback legado evita exigir troca de secrets.
+          SUPABASE_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY || secrets.SUPABASE_ANON_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
           if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_KEY" ]; then
             echo "::error::As credenciais do Supabase não foram encontradas nas Secrets do GitHub."
@@ -24,32 +32,27 @@ jobs:
           # Remove barra final da URL se houver
           CLEAN_URL="${SUPABASE_URL%/}"
 
-          echo "1. Enviando ping para o endpoint PostgREST ($CLEAN_URL/rest/v1/) ..."
-          HTTP_STATUS=$(curl -s -o response.json -w "%{http_code}" \
+          # Sem corpo de resposta nos logs; nenhuma tabela clínica é consultada.
+          HTTP_STATUS=$(curl --silent --show-error --output /dev/null --write-out "%{http_code}" \
+            --connect-timeout 5 --max-time 15 --retry 2 --retry-delay 2 --retry-max-time 50 \
             -X GET "$CLEAN_URL/rest/v1/" \
             -H "apikey: $SUPABASE_KEY" \
-            -H "Authorization: Bearer $SUPABASE_KEY")
+            -H "Authorization: Bearer $SUPABASE_KEY") || HTTP_STATUS=000
 
           echo "HTTP Status (PostgREST): $HTTP_STATUS"
 
-          if [ "$HTTP_STATUS" -ge 200 ] && [ "$HTTP_STATUS" -lt 400 ]; then
-            echo "✓ PostgREST ping bem-sucedido! Banco de dados ativo."
-          else
-            echo "::warning::Falha no PostgREST ($HTTP_STATUS). Tentando endpoint de Health..."
-            cat response.json
+          if [[ "$HTTP_STATUS" =~ ^2[0-9][0-9]$ ]]; then
+            echo "PostgREST acessível. Este ping não garante ausência de pausa por inatividade."
+            exit 0
           fi
 
-          echo "2. Enviando ping para o endpoint Auth Health ($CLEAN_URL/auth/v1/health) ..."
-          AUTH_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+          echo "::warning::PostgREST indisponível ($HTTP_STATUS). Verificando Auth para diagnóstico."
+          AUTH_STATUS=$(curl --silent --show-error --output /dev/null --write-out "%{http_code}" \
+            --connect-timeout 5 --max-time 15 \
             -X GET "$CLEAN_URL/auth/v1/health" \
-            -H "apikey: $SUPABASE_KEY")
+            -H "apikey: $SUPABASE_KEY") || AUTH_STATUS=000
 
           echo "HTTP Status (Auth Health): $AUTH_STATUS"
 
-          if [ "$HTTP_STATUS" -ge 200 ] && [ "$HTTP_STATUS" -lt 400 ] || [ "$AUTH_STATUS" -ge 200 ] && [ "$AUTH_STATUS" -lt 400 ]; then
-            echo "✓ Keep-Alive executado com sucesso! Supabase mantido ativo."
-            exit 0
-          else
-            echo "::error::Não foi possível conectar ao Supabase."
-            exit 1
-          fi
+          echo "::error::PostgREST falhou ($HTTP_STATUS); Auth ($AUTH_STATUS) não comprova atividade do banco."
+          exit 1

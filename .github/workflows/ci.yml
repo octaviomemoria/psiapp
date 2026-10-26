@@ -3,24 +3,47 @@ name: PsiApp Production CI
 on:
   push:
     branches: [ main, master ]
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
   pull_request:
     branches: [ main, master ]
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   validate:
     name: Lint, Test & Build
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NEXT_TELEMETRY_DISABLED: '1'
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           # @supabase/supabase-js (realtime-js) exige WebSocket nativo: Node 22+
           node-version: 22
           cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      - name: Test Keepalive Workflow Offline
+        run: python3 .github/tests/test_keepalive.py
 
       - name: Install Dependencies
         run: npm ci
@@ -32,7 +55,8 @@ jobs:
         run: npm test
 
       - name: Build Next.js Production Bundle
-        run: npm run build
+        # O lint estrito já passou acima; mantém compilação e checagem de tipos.
+        run: npm run build -- --no-lint
         env:
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co' }}
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-anon-key' }}
+          NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
